@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Container, CircularProgress, Alert, Typography, Box, Grid } from '@mui/material';
+import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, IconButton, Drawer, Tabs, Tab, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
 import QuantitativeScores, { QuantitativeScoreData } from './components/QuantitativeScores';
 import FilterPanel, { UserRole } from './components/FilterPanel';
 import { supabase } from './components/supabaseClient';
@@ -48,6 +49,7 @@ function App() {
   const [selectedRunner, setSelectedRunner] = useState('');
   const [hybridToggle, setHybridToggle] = useState<'myScore' | 'myCohorts'>('myScore');
   const [coachName, setCoachName] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Widget data
   const [data, setData] = useState<QuantitativeScoreData[]>([]);
@@ -393,18 +395,68 @@ function App() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header Section */}
+      {/* AppBar with Hamburger Menu */}
+      <AppBar position="static" color="default" elevation={1} sx={{ mb: 3 }}>
+        <Toolbar>
+          <IconButton edge="start" color="inherit" aria-label="menu" onClick={() => setDrawerOpen(true)} sx={{ mr: 2 }}>
+            <MenuIcon />
+          </IconButton>
+          <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
+            Athlete Performance Dashboard
+          </Typography>
+        </Toolbar>
+      </AppBar>
+      {/* Drawer for Filters */}
+      <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+        <Box sx={{ width: 320, p: 2 }} role="presentation" onClick={() => setDrawerOpen(false)}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Filters
+          </Typography>
+          <FilterPanel {...filterPanelProps} />
+        </Box>
+      </Drawer>
+      {/* Role Display Name */}
       <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Athlete Performance Dashboard
-        </Typography>
         <Typography variant="subtitle1" color="text.secondary">
           {getRoleDisplayName(effectiveRole)}
         </Typography>
       </Box>
-
-      <FilterPanel {...filterPanelProps} />
-      
+      {/* Hybrid Tabs (moved from FilterPanel) */}
+      {effectiveRole === 'hybrid' && (
+        <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Tabs
+            value={hybridToggle === 'myScore' ? 0 : 1}
+            onChange={(_, val) => setHybridToggle(val === 0 ? 'myScore' : 'myCohorts')}
+            aria-label="Hybrid Tabs"
+          >
+            <Tab label="My Score" />
+            <Tab label="My Cohorts" />
+          </Tabs>
+          {/* Runner list dropdown for My Cohorts */}
+          {hybridToggle === 'myCohorts' && (
+            <Box sx={{ mt: 2, minWidth: 220 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel id="runner-label">Runner</InputLabel>
+                <Select
+                  labelId="runner-label"
+                  value={selectedRunner}
+                  label="Runner"
+                  onChange={e => handleRunnerChange(e.target.value)}
+                >
+                  {runnerList.map(opt => (
+                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {runnerList.length === 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  No runners available for this coach and season.
+                </Typography>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress />
@@ -412,16 +464,20 @@ function App() {
       ) : error ? (
         <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
       ) : (
-        <Grid container spacing={3} sx={{ mt: 1 }}>
-          {/* Top row - Main chart */}
-          <Grid item xs={12}>
+        <Grid
+          container
+          spacing={3}
+          sx={{ mt: 1 }}
+          justifyContent="center"
+          alignItems="center"
+        >
+          <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
             <QuantitativeScores data={data} />
           </Grid>
-          {/* Bottom row - Two smaller widgets */}
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
             <CumulativeScore score={cumulativeScore ?? 0} target={5} />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
             <ActivitySummary
               mileagePercent={mileagePercent ?? 0}
               strengthPercent={strengthPercent ?? 0}

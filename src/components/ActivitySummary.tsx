@@ -65,13 +65,13 @@ function ProgressCircle({ percent, color, label }: { percent: number; color: str
 
 const ActivitySummary: React.FC<ActivitySummaryProps> = ({ mileagePercent, strengthPercent }) => {
   return (
-    <Box sx={{ width: '100%', height: 350, bgcolor: 'background.paper', borderRadius: 2, p: 2, boxShadow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+    <Box sx={{ width: '100%', maxWidth: 400, mx: 'auto', bgcolor: 'background.paper', borderRadius: 2, p: 2, boxShadow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
       <Typography variant="h6" gutterBottom>
         Activity Summary
       </Typography>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={6} alignItems="center" justifyContent="center" sx={{ mt: 2 }}>
-        <ProgressCircle percent={strengthPercent} color="#EF4444" label="Strength" />
-        <ProgressCircle percent={mileagePercent} color="#06B6D4" label="Mileage" />
+        <ProgressCircle percent={strengthPercent} color="#5B5BF6" label="Strength" />
+        <ProgressCircle percent={mileagePercent} color="#14B8C4" label="Mileage" />
       </Stack>
     </Box>
   );
