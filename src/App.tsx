@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, IconButton, Drawer, Tabs, Tab, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, IconButton, Drawer, Tabs, Tab, FormControl, InputLabel, Select, MenuItem, Chip, Stack } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import QuantitativeScores, { QuantitativeScoreData } from './components/QuantitativeScores';
 import FilterPanel, { UserRole } from './components/FilterPanel';
@@ -49,7 +49,6 @@ function App() {
   const [selectedRunner, setSelectedRunner] = useState('');
   const [hybridToggle, setHybridToggle] = useState<'myScore' | 'myCohorts'>('myScore');
   const [coachName, setCoachName] = useState('');
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Widget data
   const [data, setData] = useState<QuantitativeScoreData[]>([]);
@@ -346,7 +345,7 @@ function App() {
     fetchCumulativeScore();
   }, [fetchCumulativeScore]);
 
-  // Activity Summary state
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [mileagePercent, setMileagePercent] = useState<number | null>(null);
   const [strengthPercent, setStrengthPercent] = useState<number | null>(null);
 
@@ -379,7 +378,6 @@ function App() {
     setStrengthPercent(strength);
   }, [selectedRunner, email, season]);
 
-  // Fetch activity summary when runner, email, or season changes
   useEffect(() => {
     fetchActivitySummary();
   }, [fetchActivitySummary]);
@@ -388,7 +386,7 @@ function App() {
     switch (role) {
       case 'admin': return 'Administrative View';
       case 'coach': return 'Coach Dashboard';
-      case 'hybrid': return 'Coach & Athlete View';
+      case 'hybrid': return 'Athlete Performance Dashboard';
       default: return 'Athlete Dashboard';
     }
   };
@@ -401,11 +399,58 @@ function App() {
           <IconButton edge="start" color="inherit" aria-label="menu" onClick={() => setDrawerOpen(true)} sx={{ mr: 2 }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
-            Athlete Performance Dashboard
+          <Typography variant="h5" component="h1" sx={{ flexGrow: 1 }}>
+            Pulse
           </Typography>
         </Toolbar>
       </AppBar>
+      {/* Selection Chips Panel */}
+      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-start' }}>
+        <Stack direction="row" spacing={2}>
+          <Chip
+            label={`Season ${season}`}
+            sx={{
+              bgcolor: '#e3f2fd',
+              color: '#1976d2',
+              fontWeight: 600,
+              fontSize: 18,
+              borderRadius: 999,
+              px: 2,
+              py: 1,
+            }}
+          />
+          {/* Show runner chip if selected */}
+          {selectedRunner && (
+            <Chip
+              label={runnerList.find(r => r.value === selectedRunner)?.label || selectedRunner}
+              sx={{
+                bgcolor: '#e3f2fd',
+                color: '#1976d2',
+                fontWeight: 600,
+                fontSize: 18,
+                borderRadius: 999,
+                px: 2,
+                py: 1,
+              }}
+            />
+          )}
+          {/* Show coach chip for admin if selected */}
+          {userRole === 'admin' && selectedCoach && (
+            <Chip
+              label={selectedCoach}
+              sx={{
+                bgcolor: '#e3f2fd',
+                color: '#1976d2',
+                fontWeight: 600,
+                fontSize: 18,
+                borderRadius: 999,
+                px: 2,
+                py: 1,
+              }}
+            />
+          )}
+        </Stack>
+      </Box>
       {/* Drawer for Filters */}
       <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <Box sx={{ width: 320, p: 2 }} role="presentation" onClick={() => setDrawerOpen(false)}>
@@ -415,12 +460,6 @@ function App() {
           <FilterPanel {...filterPanelProps} />
         </Box>
       </Drawer>
-      {/* Role Display Name */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" color="text.secondary">
-          {getRoleDisplayName(effectiveRole)}
-        </Typography>
-      </Box>
       {/* Hybrid Tabs (moved from FilterPanel) */}
       {effectiveRole === 'hybrid' && (
         <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -457,34 +496,70 @@ function App() {
           )}
         </Box>
       )}
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : error ? (
-        <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
-      ) : (
-        <Grid
-          container
-          spacing={3}
-          sx={{ mt: 1 }}
-          justifyContent="center"
-          alignItems="center"
+      {/* Dashboard Container with header and widgets */}
+      <Box sx={{
+        bgcolor: '#f7f9fb', // light gray for contrast
+        borderRadius: 4,
+        boxShadow: 2,
+        p: { xs: 2, sm: 4 },
+        mt: 2,
+        maxWidth: 900,
+        mx: 'auto',
+      }}>
+        {/* Dashboard Header */}
+        <Typography
+          variant="h4"
+          component="h2"
+          align="center"
+          sx={{
+            fontWeight: 700,
+            color: '#1976d2',
+            mb: 2,
+            mt: 1,
+            letterSpacing: 0.5,
+          }}
         >
-          <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-            <QuantitativeScores data={data} />
+          Athlete Performance Dashboard
+        </Typography>
+        <Box sx={{ width: '100%', mb: 3 }}>
+          <Box sx={{ borderBottom: '2px solid #e3f2fd', width: '80%', mx: 'auto' }} />
+        </Box>
+        {/* Widgets Grid */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : error ? (
+          <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
+        ) : (
+          <Grid
+            container
+            spacing={3}
+            sx={{ mt: 1 }}
+            justifyContent="center"
+            alignItems="center"
+          >
+            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ width: '100%', maxWidth: 500, mx: 'auto', borderLeft: '4px solid #1976d2', borderRadius: 2, bgcolor: 'white' }}>
+                <QuantitativeScores data={data} />
+              </Box>
+            </Grid>
+            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ width: '100%', maxWidth: 500, mx: 'auto', borderLeft: '4px solid #1976d2', borderRadius: 2, bgcolor: 'white' }}>
+                <CumulativeScore score={cumulativeScore ?? 0} target={5} />
+              </Box>
+            </Grid>
+            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
+              <Box sx={{ width: '100%', maxWidth: 500, mx: 'auto', borderLeft: '4px solid #1976d2', borderRadius: 2, bgcolor: 'white' }}>
+                <ActivitySummary
+                  mileagePercent={mileagePercent ?? 0}
+                  strengthPercent={strengthPercent ?? 0}
+                />
+              </Box>
+            </Grid>
           </Grid>
-          <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-            <CumulativeScore score={cumulativeScore ?? 0} target={5} />
-          </Grid>
-          <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-            <ActivitySummary
-              mileagePercent={mileagePercent ?? 0}
-              strengthPercent={strengthPercent ?? 0}
-            />
-          </Grid>
-        </Grid>
-      )}
+        )}
+      </Box>
     </Container>
   );
 }

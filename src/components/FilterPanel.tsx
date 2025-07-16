@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Box, FormControl, InputLabel, Select, MenuItem, Stack, Typography, TextField, Tabs, Tab
+  Box, FormControl, InputLabel, Select, MenuItem, Stack, ToggleButton, ToggleButtonGroup, Typography, TextField
 } from '@mui/material';
 
 export type UserRole = 'admin' | 'coach' | 'hybrid' | 'athlete';
@@ -49,59 +49,87 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
 }) => {
   return (
     <Box sx={{ width: '100%', mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 2, boxShadow: 1 }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" justifyContent="flex-start">
-        <FormControl sx={{ minWidth: 140 }} size="small">
-          <InputLabel id="season-label">Season</InputLabel>
-          <Select
-            labelId="season-label"
-            value={season}
-            label="Season"
-            onChange={e => onSeasonChange(e.target.value)}
-          >
-            {SEASON_OPTIONS.map(opt => (
-              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        {/* Hybrid: Tabs for My Score and My Cohorts */}
-        {userRole === 'hybrid' && onHybridToggle && (
-          <></> // Tabs will be rendered in App.tsx, not here
-        )}
-        {/* Admin: Coach dropdown */}
-        {userRole === 'admin' && coachList.length > 0 && onCoachChange && (
-          <FormControl sx={{ minWidth: 180 }} size="small">
-            <InputLabel id="coach-label">Coach</InputLabel>
+      <Stack 
+        direction={{ xs: 'column', md: 'row' }} 
+        spacing={2} 
+        sx={{ flexWrap: 'wrap', gap: 2 }}
+      >
+        {/* Primary filters group */}
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="season-label">Season</InputLabel>
             <Select
-              labelId="coach-label"
-              value={selectedCoach}
-              label="Coach"
-              onChange={e => onCoachChange(e.target.value)}
+              labelId="season-label"
+              value={season}
+              label="Season"
+              onChange={e => onSeasonChange(e.target.value)}
             >
-              {coachList.map(opt => (
+              {SEASON_OPTIONS.map(opt => (
                 <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
               ))}
             </Select>
           </FormControl>
-        )}
-        {/* Admin, Coach: Runner dropdown */}
-        {((userRole === 'admin' && runnerList.length > 0 && onRunnerChange) ||
-          (userRole === 'coach' && runnerList.length > 0 && onRunnerChange)) && (
-          <Box>
-            <FormControl sx={{ minWidth: 180 }} size="small">
-              <InputLabel id="runner-label">Runner</InputLabel>
+          
+          {/* Hybrid: Toggle between My Score and My Cohorts */}
+          {userRole === 'hybrid' && onHybridToggle && (
+            <ToggleButtonGroup
+              value={hybridToggle}
+              exclusive
+              onChange={(_, val) => val && onHybridToggle(val)}
+              size="small"
+              sx={{ minWidth: 180 }}
+            >
+              <ToggleButton value="myScore">My Score</ToggleButton>
+              <ToggleButton value="myCohorts">My Cohorts</ToggleButton>
+            </ToggleButtonGroup>
+          )}
+        </Box>
+        
+        {/* Secondary filters group */}
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {/* Admin: Coach dropdown */}
+          {userRole === 'admin' && coachList.length > 0 && onCoachChange && (
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel id="coach-label">Coach</InputLabel>
               <Select
-                labelId="runner-label"
-                value={selectedRunner}
-                label="Runner"
-                onChange={e => onRunnerChange && onRunnerChange(e.target.value)}
+                labelId="coach-label"
+                value={selectedCoach}
+                label="Coach"
+                onChange={e => onCoachChange(e.target.value)}
               >
-                {runnerList.map(opt => (
+                {coachList.map(opt => (
                   <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
                 ))}
               </Select>
             </FormControl>
-          </Box>
-        )}
+          )}
+          
+          {/* Admin, Coach, Hybrid (My Cohorts): Runner dropdown */}
+          {((userRole === 'admin' && runnerList.length > 0 && onRunnerChange) ||
+            (userRole === 'coach' && runnerList.length > 0 && onRunnerChange) ||
+            (userRole === 'hybrid' && hybridToggle === 'myCohorts' && onRunnerChange)) && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel id="runner-label">Runner</InputLabel>
+                <Select
+                  labelId="runner-label"
+                  value={selectedRunner}
+                  label="Runner"
+                  onChange={e => onRunnerChange && onRunnerChange(e.target.value)}
+                >
+                  {runnerList.map(opt => (
+                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {userRole === 'hybrid' && hybridToggle === 'myCohorts' && runnerList.length === 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', maxWidth: 160 }}>
+                  No runners available for this coach and season.
+                </Typography>
+              )}
+            </Box>
+          )}
+        </Box>
       </Stack>
     </Box>
   );

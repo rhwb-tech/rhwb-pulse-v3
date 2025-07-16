@@ -26,7 +26,7 @@ const QuantitativeScores: React.FC<QuantitativeScoresProps> = ({ data }) => {
   const theme = useTheme();
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 400, mx: 'auto', bgcolor: 'background.paper', borderRadius: 2, p: 2, boxShadow: 1, alignItems: 'center' }}>
+    <Box sx={{ width: '100%', height: 350, bgcolor: 'background.paper', borderRadius: 2, p: 2, boxShadow: 1 }}>
       <Typography variant="h6" gutterBottom>
         Quantitative Scores
       </Typography>
