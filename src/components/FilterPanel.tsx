@@ -63,26 +63,14 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               value={season}
               label="Season"
               onChange={e => onSeasonChange(e.target.value)}
+              sx={{ minHeight: 40 }}
             >
               {SEASON_OPTIONS.map(opt => (
-                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>{opt.label}</MenuItem>
               ))}
             </Select>
           </FormControl>
           
-          {/* Hybrid: Toggle between My Score and My Cohorts */}
-          {userRole === 'hybrid' && onHybridToggle && (
-            <ToggleButtonGroup
-              value={hybridToggle}
-              exclusive
-              onChange={(_, val) => val && onHybridToggle(val)}
-              size="small"
-              sx={{ minWidth: 180 }}
-            >
-              <ToggleButton value="myScore">My Score</ToggleButton>
-              <ToggleButton value="myCohorts">My Cohorts</ToggleButton>
-            </ToggleButtonGroup>
-          )}
         </Box>
         
         {/* Secondary filters group */}
@@ -96,18 +84,18 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                 value={selectedCoach}
                 label="Coach"
                 onChange={e => onCoachChange(e.target.value)}
+                sx={{ minHeight: 40 }}
               >
                 {coachList.map(opt => (
-                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                  <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>{opt.label}</MenuItem>
                 ))}
               </Select>
             </FormControl>
           )}
           
-          {/* Admin, Coach, Hybrid (My Cohorts): Runner dropdown */}
+          {/* Admin, Coach: Runner dropdown */}
           {((userRole === 'admin' && runnerList.length > 0 && onRunnerChange) ||
-            (userRole === 'coach' && runnerList.length > 0 && onRunnerChange) ||
-            (userRole === 'hybrid' && hybridToggle === 'myCohorts' && onRunnerChange)) && (
+            (userRole === 'coach' && runnerList.length > 0 && onRunnerChange)) && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
               <FormControl size="small" sx={{ minWidth: 160 }}>
                 <InputLabel id="runner-label">Runner</InputLabel>
@@ -116,17 +104,13 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                   value={selectedRunner}
                   label="Runner"
                   onChange={e => onRunnerChange && onRunnerChange(e.target.value)}
+                  sx={{ minHeight: 40 }}
                 >
                   {runnerList.map(opt => (
-                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                    <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>{opt.label}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
-              {userRole === 'hybrid' && hybridToggle === 'myCohorts' && runnerList.length === 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem', maxWidth: 160 }}>
-                  No runners available for this coach and season.
-                </Typography>
-              )}
             </Box>
           )}
         </Box>

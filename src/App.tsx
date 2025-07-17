@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, IconButton, Drawer, Tabs, Tab, FormControl, InputLabel, Select, MenuItem, Chip, Stack } from '@mui/material';
+import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, IconButton, Drawer, Chip, Stack, Skeleton, Tabs, Tab, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import QuantitativeScores, { QuantitativeScoreData } from './components/QuantitativeScores';
 import FilterPanel, { UserRole } from './components/FilterPanel';
@@ -300,11 +300,7 @@ function App() {
     filterPanelProps.selectedRunner = selectedRunner;
     filterPanelProps.onEmailChange = () => {};
   } else if (effectiveRole === 'hybrid') {
-    filterPanelProps.hybridToggle = hybridToggle;
-    filterPanelProps.onHybridToggle = setHybridToggle;
-    filterPanelProps.runnerList = hybridToggle === 'myCohorts' ? runnerList : [];
-    filterPanelProps.onRunnerChange = hybridToggle === 'myCohorts' ? handleRunnerChange : () => {};
-    filterPanelProps.selectedRunner = selectedRunner;
+    // Hybrid users don't have filters in FilterPanel - they use tabs above
     filterPanelProps.onEmailChange = () => {};
   } else {
     // athlete
@@ -396,7 +392,18 @@ function App() {
       {/* AppBar with Hamburger Menu */}
       <AppBar position="static" color="default" elevation={1} sx={{ mb: 3 }}>
         <Toolbar>
-          <IconButton edge="start" color="inherit" aria-label="menu" onClick={() => setDrawerOpen(true)} sx={{ mr: 2 }}>
+          <IconButton 
+            edge="start" 
+            color="inherit" 
+            aria-label="menu" 
+            onClick={() => setDrawerOpen(true)} 
+            sx={{ 
+              mr: 2,
+              minWidth: 48,
+              minHeight: 48,
+              '&:hover': { bgcolor: 'action.hover' }
+            }}
+          >
             <MenuIcon />
           </IconButton>
           <Typography variant="h5" component="h1" sx={{ flexGrow: 1 }}>
@@ -405,18 +412,37 @@ function App() {
         </Toolbar>
       </AppBar>
       {/* Selection Chips Panel */}
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-start' }}>
-        <Stack direction="row" spacing={2}>
+      <Box sx={{ 
+        mb: 2, 
+        display: 'flex', 
+        justifyContent: 'flex-start',
+        overflowX: 'auto',
+        pb: 1,
+        '&::-webkit-scrollbar': {
+          height: 6,
+        },
+        '&::-webkit-scrollbar-track': {
+          backgroundColor: '#f1f1f1',
+          borderRadius: 3,
+        },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: '#c1c1c1',
+          borderRadius: 3,
+        },
+      }}>
+        <Stack direction="row" spacing={2} sx={{ minWidth: 'fit-content' }}>
           <Chip
             label={`Season ${season}`}
             sx={{
               bgcolor: '#e3f2fd',
               color: '#1976d2',
               fontWeight: 600,
-              fontSize: 18,
+              fontSize: { xs: 14, sm: 16, md: 18 },
               borderRadius: 999,
               px: 2,
               py: 1,
+              minWidth: 'fit-content',
+              whiteSpace: 'nowrap',
             }}
           />
           {/* Show runner chip if selected */}
@@ -427,10 +453,12 @@ function App() {
                 bgcolor: '#e3f2fd',
                 color: '#1976d2',
                 fontWeight: 600,
-                fontSize: 18,
+                fontSize: { xs: 14, sm: 16, md: 18 },
                 borderRadius: 999,
                 px: 2,
                 py: 1,
+                minWidth: 'fit-content',
+                whiteSpace: 'nowrap',
               }}
             />
           )}
@@ -442,10 +470,12 @@ function App() {
                 bgcolor: '#e3f2fd',
                 color: '#1976d2',
                 fontWeight: 600,
-                fontSize: 18,
+                fontSize: { xs: 14, sm: 16, md: 18 },
                 borderRadius: 999,
                 px: 2,
                 py: 1,
+                minWidth: 'fit-content',
+                whiteSpace: 'nowrap',
               }}
             />
           )}
@@ -460,20 +490,21 @@ function App() {
           <FilterPanel {...filterPanelProps} />
         </Box>
       </Drawer>
-      {/* Hybrid Tabs (moved from FilterPanel) */}
+      {/* Hybrid Tabs */}
       {effectiveRole === 'hybrid' && (
         <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Tabs
             value={hybridToggle === 'myScore' ? 0 : 1}
             onChange={(_, val) => setHybridToggle(val === 0 ? 'myScore' : 'myCohorts')}
             aria-label="Hybrid Tabs"
+            sx={{ mb: 2 }}
           >
-            <Tab label="My Score" />
-            <Tab label="My Cohorts" />
+            <Tab label="My Score" sx={{ minWidth: 120, minHeight: 48 }} />
+            <Tab label="My Cohorts" sx={{ minWidth: 120, minHeight: 48 }} />
           </Tabs>
           {/* Runner list dropdown for My Cohorts */}
           {hybridToggle === 'myCohorts' && (
-            <Box sx={{ mt: 2, minWidth: 220 }}>
+            <Box sx={{ minWidth: 220 }}>
               <FormControl fullWidth size="small">
                 <InputLabel id="runner-label">Runner</InputLabel>
                 <Select
@@ -481,14 +512,15 @@ function App() {
                   value={selectedRunner}
                   label="Runner"
                   onChange={e => handleRunnerChange(e.target.value)}
+                  sx={{ minHeight: 40 }}
                 >
                   {runnerList.map(opt => (
-                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                    <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>{opt.label}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
               {runnerList.length === 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
                   No runners available for this coach and season.
                 </Typography>
               )}
@@ -496,6 +528,7 @@ function App() {
           )}
         </Box>
       )}
+
       {/* Dashboard Container with header and widgets */}
       <Box sx={{
         bgcolor: '#f7f9fb', // light gray for contrast
@@ -517,6 +550,7 @@ function App() {
             mb: 2,
             mt: 1,
             letterSpacing: 0.5,
+            fontSize: { xs: '2rem', sm: '2.5rem', md: '2.75rem' },
           }}
         >
           Athlete Performance Dashboard
@@ -526,31 +560,98 @@ function App() {
         </Box>
         {/* Widgets Grid */}
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <CircularProgress />
-          </Box>
+          <Grid container spacing={4} sx={{ mt: 1 }}>
+            {/* Top row skeleton */}
+            <Grid item xs={12}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: '4px solid #1976d2', 
+                borderRadius: 2, 
+                bgcolor: 'white', 
+                p: 2, 
+                height: 350,
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
+                <Skeleton variant="text" width="40%" height={32} />
+                <Skeleton variant="rectangular" width="100%" height={280} sx={{ mt: 2 }} />
+              </Box>
+            </Grid>
+            {/* Bottom row skeletons */}
+            <Grid item xs={12} md={6}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: '4px solid #1976d2', 
+                borderRadius: 2, 
+                bgcolor: 'white', 
+                p: 2, 
+                height: 350,
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
+                <Skeleton variant="text" width="50%" height={32} />
+                <Skeleton variant="circular" width={200} height={200} sx={{ mx: 'auto', mt: 3 }} />
+                <Skeleton variant="text" width="30%" height={24} sx={{ mx: 'auto', mt: 2 }} />
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: '4px solid #1976d2', 
+                borderRadius: 2, 
+                bgcolor: 'white', 
+                p: 2, 
+                height: 350,
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
+                <Skeleton variant="text" width="50%" height={32} />
+                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 4, mt: 4 }}>
+                  <Skeleton variant="circular" width={120} height={120} />
+                  <Skeleton variant="circular" width={120} height={120} />
+                </Box>
+              </Box>
+            </Grid>
+          </Grid>
         ) : error ? (
           <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
         ) : (
-          <Grid
-            container
-            spacing={3}
-            sx={{ mt: 1 }}
-            justifyContent="center"
-            alignItems="center"
-          >
-            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-              <Box sx={{ width: '100%', maxWidth: 500, mx: 'auto', borderLeft: '4px solid #1976d2', borderRadius: 2, bgcolor: 'white' }}>
+          <Grid container spacing={4} sx={{ mt: 1 }}>
+            {/* Top row - Full width chart */}
+            <Grid item xs={12}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: '4px solid #1976d2', 
+                borderRadius: 2, 
+                bgcolor: 'white',
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
                 <QuantitativeScores data={data} />
               </Box>
             </Grid>
-            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-              <Box sx={{ width: '100%', maxWidth: 500, mx: 'auto', borderLeft: '4px solid #1976d2', borderRadius: 2, bgcolor: 'white' }}>
+            {/* Bottom row - Side by side on md+ */}
+            <Grid item xs={12} md={6}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: '4px solid #1976d2', 
+                borderRadius: 2, 
+                bgcolor: 'white',
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
                 <CumulativeScore score={cumulativeScore ?? 0} target={5} />
               </Box>
             </Grid>
-            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center' }}>
-              <Box sx={{ width: '100%', maxWidth: 500, mx: 'auto', borderLeft: '4px solid #1976d2', borderRadius: 2, bgcolor: 'white' }}>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: '4px solid #1976d2', 
+                borderRadius: 2, 
+                bgcolor: 'white',
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
                 <ActivitySummary
                   mileagePercent={mileagePercent ?? 0}
                   strengthPercent={strengthPercent ?? 0}
