@@ -6,6 +6,7 @@ import FilterPanel, { UserRole } from './components/FilterPanel';
 import { supabase } from './components/supabaseClient';
 import CumulativeScore from './components/CumulativeScore';
 import ActivitySummary from './components/ActivitySummary';
+import { useAuth } from './contexts/AuthContext';
 
 interface Option {
   value: string;
@@ -17,14 +18,6 @@ const DEFAULT_SEASON = '13';
 function getQuantSql(season: string, email: string) {
   return `SELECT meso, max(case when category='Personal' then quant end)  as quant_personal,\n       max(case when category='Race Distance' then quant end) as quant_race_distance,\n       max(case when category='Coach' then quant end) as quant_coach\n       FROM rhwb_meso_scores where season = '${season ? `Season ${season}` : ''}' and email_id = '${email}'\nGROUP BY meso`;
 }
-
-function getEmailFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('email') || '';
-}
-
-const SESSION_EMAIL_KEY = 'pulse_email_id';
-const SESSION_ROLE_KEY = 'pulse_user_role';
 
 function getHybridRunnerSql(season: string, email: string) {
   return `SELECT email_id FROM runner_season_info WHERE season = '${season}' AND coach = '${email}'`;
@@ -39,10 +32,12 @@ function getCoachListSql(season: string) {
 }
 
 function App() {
+  const { user } = useAuth();
+  
   // Filter state
   const [season, setSeason] = useState(DEFAULT_SEASON);
-  const [email, setEmail] = useState('');
-  const [userRole, setUserRole] = useState<UserRole>('athlete');
+  const email = user?.email || '';
+  const userRole = user?.role || 'athlete';
   const [coachList, setCoachList] = useState<Option[]>([]);
   const [runnerList, setRunnerList] = useState<Option[]>([]);
   const [selectedCoach, setSelectedCoach] = useState('');
@@ -58,54 +53,15 @@ function App() {
   // Track if initial load has occurred
   const [initialLoad, setInitialLoad] = useState(true);
 
-  // Parse email from sessionStorage or URL on initial load and update session if URL changes
-  useEffect(() => {
-    const urlEmail = getEmailFromUrl();
-    const sessionEmail = sessionStorage.getItem(SESSION_EMAIL_KEY);
-    if (urlEmail && urlEmail !== sessionEmail) {
-      setEmail(urlEmail);
-      sessionStorage.setItem(SESSION_EMAIL_KEY, urlEmail);
-      // Clear role so it will be refetched for the new email
-      sessionStorage.removeItem(SESSION_ROLE_KEY);
-    } else if (sessionEmail) {
-      setEmail(sessionEmail);
-    }
-  }, [window.location.search]);
-
-  // Fetch user role
-  useEffect(() => {
-    if (!email) return;
-    const sessionRole = sessionStorage.getItem(SESSION_ROLE_KEY);
-    if (sessionRole) {
-      setUserRole(sessionRole as UserRole);
-      return;
-    }
-    const fetchRole = async () => {
-      const { data: roles, error } = await supabase.from('v_pulse_roles').select('*').eq('email_id', email);
-      if (error) {
-        setUserRole('athlete');
-        sessionStorage.setItem(SESSION_ROLE_KEY, 'athlete');
-        return;
-      }
-      if (roles && roles.length > 0) {
-        setUserRole(roles[0].role as UserRole);
-        sessionStorage.setItem(SESSION_ROLE_KEY, roles[0].role);
-      } else {
-        setUserRole('athlete');
-        sessionStorage.setItem(SESSION_ROLE_KEY, 'athlete');
-      }
-    };
-    fetchRole();
-  }, [email]);
+  // Authentication is now handled by JWT context
 
   // Fetch coach name for coach/hybrid roles
   useEffect(() => {
-    let sessionEmail = sessionStorage.getItem(SESSION_EMAIL_KEY);
-    if ((userRole === 'coach' || userRole === 'hybrid') && sessionEmail) {
+    if ((userRole === 'coach' || userRole === 'hybrid') && email) {
       supabase
         .from('rhwb_coaches')
         .select('coach')
-        .eq('email_id', sessionEmail)
+        .eq('email_id', email)
         .then(({ data }) => {
           if (data && data.length > 0) setCoachName(data[0].coach);
         });
@@ -223,16 +179,13 @@ function App() {
     // eslint-disable-next-line
   }, [hybridToggle, runnerList]);
 
-  const sessionRole = sessionStorage.getItem(SESSION_ROLE_KEY) as UserRole | null;
-  const effectiveRole = sessionRole || userRole;
-
   // When admin selects a coach, auto-select the first runner for that coach
   useEffect(() => {
-    if (effectiveRole === 'admin' && selectedCoach && runnerList.length > 0) {
+    if (userRole === 'admin' && selectedCoach && runnerList.length > 0) {
       setSelectedRunner(runnerList[0].value);
     }
     // eslint-disable-next-line
-  }, [effectiveRole, selectedCoach, runnerList]);
+  }, [userRole, selectedCoach, runnerList]);
 
   // Handle Apply
   const handleApply = () => {
@@ -246,15 +199,7 @@ function App() {
     setSelectedRunner('');
     setHybridToggle('myScore');
     setData([]);
-    // Reset email to session or URL param
-    const sessionEmail = sessionStorage.getItem(SESSION_EMAIL_KEY);
-    if (sessionEmail) {
-      setEmail(sessionEmail);
-    } else {
-      setEmail(getEmailFromUrl());
-    }
-    // Optionally clear role from session
-    // sessionStorage.removeItem(SESSION_ROLE_KEY);
+    // Email and role come from JWT, no need to reset
   };
 
   // Handle coach change for admin: set coach, select first runner, and auto-apply
@@ -284,22 +229,22 @@ function App() {
     email,
     onApply: handleApply,
     onClear: handleClear,
-    userRole: effectiveRole,
+    userRole: userRole,
   };
-  if (effectiveRole === 'admin') {
+  if (userRole === 'admin') {
     filterPanelProps.coachList = coachList;
     filterPanelProps.onCoachChange = handleCoachChange;
     filterPanelProps.selectedCoach = selectedCoach;
     filterPanelProps.runnerList = runnerList;
     filterPanelProps.onRunnerChange = handleRunnerChange;
     filterPanelProps.selectedRunner = selectedRunner;
-    filterPanelProps.onEmailChange = setEmail;
-  } else if (effectiveRole === 'coach') {
+    filterPanelProps.onEmailChange = () => {};
+  } else if (userRole === 'coach') {
     filterPanelProps.runnerList = runnerList;
     filterPanelProps.onRunnerChange = handleRunnerChange;
     filterPanelProps.selectedRunner = selectedRunner;
     filterPanelProps.onEmailChange = () => {};
-  } else if (effectiveRole === 'hybrid') {
+  } else if (userRole === 'hybrid') {
     // Hybrid users don't have filters in FilterPanel - they use tabs above
     filterPanelProps.onEmailChange = () => {};
   } else {
@@ -491,7 +436,7 @@ function App() {
         </Box>
       </Drawer>
       {/* Hybrid Tabs */}
-      {effectiveRole === 'hybrid' && (
+      {userRole === 'hybrid' && (
         <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Tabs
             value={hybridToggle === 'myScore' ? 0 : 1}
