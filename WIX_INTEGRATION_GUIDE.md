@@ -30,7 +30,99 @@ Your JWT token must include the following claims:
 
 ## Wix Implementation Options
 
-### Option 1: URL Parameter (Recommended for Initial Setup)
+### Option 1: Bearer Token via postMessage (Recommended for Production)
+
+Pass the JWT token as a Bearer token via postMessage when embedding the dashboard in an iframe:
+
+```javascript
+// In your Wix site code (iframe parent)
+import wixSecrets from 'wix-secrets-backend';
+import { sign } from 'jsonwebtoken';
+
+export async function embedDashboardWithBearer(userEmail, userRole) {
+  // Get your JWT secret from Wix Secrets Manager
+  const jwtSecret = await wixSecrets.getSecret('JWT_SECRET');
+  
+  // Create JWT payload
+  const payload = {
+    email: userEmail,
+    role: userRole,
+    name: 'User Name', // Optional
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24) // 24 hours expiration
+  };
+  
+  // Sign the token
+  const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
+  
+  // Send Bearer token to dashboard iframe
+  const iframe = document.getElementById('dashboard-iframe');
+  if (iframe && iframe.contentWindow) {
+    iframe.contentWindow.postMessage({
+      type: 'BEARER_TOKEN',
+      token: token // Will be automatically prefixed with 'Bearer ' if needed
+    }, 'https://your-dashboard-domain.com');
+  }
+}
+
+// Usage in Wix page code
+$w.onReady(function () {
+  // Load the dashboard iframe first
+  $w("#dashboardFrame").src = "https://your-dashboard-domain.com";
+  
+  // Send Bearer token after iframe loads
+  $w("#dashboardFrame").onLoad(() => {
+    setTimeout(async () => {
+      const userEmail = $w("#emailInput").value;
+      const userRole = $w("#roleDropdown").value;
+      await embedDashboardWithBearer(userEmail, userRole);
+    }, 1000); // Give iframe time to initialize
+  });
+});
+```
+
+### Option 2: Bearer Token via Custom Storage
+
+Store the Bearer token in a way the dashboard can access:
+
+```javascript
+// In your Wix site code
+import wixSecrets from 'wix-secrets-backend';
+import { sign } from 'jsonwebtoken';
+
+export async function setDashboardBearerToken(userEmail, userRole) {
+  const jwtSecret = await wixSecrets.getSecret('JWT_SECRET');
+  
+  const payload = {
+    email: userEmail,
+    role: userRole,
+    name: 'User Name',
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+  };
+  
+  const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
+  
+  // Store Bearer token for dashboard to access
+  // Option A: Via sessionStorage (if same-origin)
+  sessionStorage.setItem('bearer_auth_token', token);
+  
+  // Option B: Via custom storage mechanism
+  localStorage.setItem('wix_bearer_token', `Bearer ${token}`);
+  
+  // Then redirect to dashboard
+  wixLocation.to('https://your-dashboard-domain.com');
+}
+
+// Usage
+$w.onReady(function () {
+  $w("#launchDashboard").onClick(async () => {
+    const userEmail = $w("#userEmail").value;
+    const userRole = $w("#userRole").value;
+    await setDashboardBearerToken(userEmail, userRole);
+  });
+});
+```
+
+### Option 3: URL Parameter (Fallback for Direct Links)
 
 Pass the JWT token as a URL parameter when redirecting to the dashboard:
 
@@ -74,7 +166,7 @@ $w.onReady(function () {
 });
 ```
 
-### Option 2: Wix Velo Backend Integration
+### Option 4: Wix Velo Backend Integration
 
 Create a backend function to generate tokens:
 
@@ -148,7 +240,7 @@ $w.onReady(function () {
 });
 ```
 
-### Option 3: Wix Members Integration
+### Option 5: Wix Members Integration
 
 Integrate with Wix Members for automatic user detection:
 
@@ -225,12 +317,31 @@ openssl rand -base64 32
 
 ### 2. Environment Variables (for Dashboard App)
 
-The dashboard app uses the same JWT secret for validation. Set these in your deployment environment:
+The dashboard app uses environment variables for configuration. Set these in your deployment environment:
 
 ```bash
-# For dashboard app environment
-JWT_SECRET=your-same-secret-from-wix
+# JWT Configuration
+REACT_APP_JWT_SECRET=your-same-secret-from-wix
+REACT_APP_TOKEN_STORAGE_KEY=rhwb_pulse_auth_token
+REACT_APP_TOKEN_EXPIRY_BUFFER=300
+
+# Bearer Token Configuration (Optional)
+REACT_APP_WIX_ORIGIN=https://your-wix-site.com
+
+# Optional: Supabase Configuration
+REACT_APP_SUPABASE_URL=your-supabase-url
+REACT_APP_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
+
+### Token Priority Order
+
+The dashboard checks for JWT tokens in the following priority order:
+
+1. **Bearer Token** (via postMessage or custom storage) - `getBearerToken()`
+2. **URL Parameter** - `?token=JWT_TOKEN`
+3. **Local Storage** - Previously stored token
+
+This allows for flexible integration patterns where Bearer tokens take precedence over URL parameters.
 
 ## Example JWT Payloads
 
@@ -319,6 +430,47 @@ The dashboard handles these error cases:
 - **Missing required claims**: Shows error message
 - **Invalid role**: Defaults to 'athlete' role
 
+## Vercel Deployment Setup
+
+### 1. Environment Variables in Vercel Dashboard
+
+1. Go to your Vercel project dashboard
+2. Navigate to Settings → Environment Variables
+3. Add the following variables:
+
+```
+REACT_APP_JWT_SECRET=your-production-secret-key
+REACT_APP_TOKEN_STORAGE_KEY=rhwb_pulse_auth_token
+REACT_APP_TOKEN_EXPIRY_BUFFER=300
+```
+
+### 2. Different Environments
+
+Set different secrets for each environment:
+
+```bash
+# Production
+REACT_APP_JWT_SECRET=super-secure-production-secret-here
+
+# Preview/Staging
+REACT_APP_JWT_SECRET=staging-secret-key-here
+
+# Development (local .env.local)
+REACT_APP_JWT_SECRET=dev-secret-key-here
+```
+
+### 3. Vercel CLI Deployment
+
+You can also set environment variables via Vercel CLI:
+
+```bash
+# Set production environment variable
+vercel env add REACT_APP_JWT_SECRET production
+
+# Set preview environment variable
+vercel env add REACT_APP_JWT_SECRET preview
+```
+
 ## Security Best Practices
 
 1. **Short Token Expiration**: Use 8-24 hour expiration times
@@ -326,6 +478,7 @@ The dashboard handles these error cases:
 3. **HTTPS Only**: Always use HTTPS for token transmission
 4. **Token Rotation**: Consider implementing refresh tokens for long sessions
 5. **Role Validation**: Always validate roles on both frontend and backend
+6. **Environment Separation**: Use different secrets for development/staging/production
 
 ## Troubleshooting
 
