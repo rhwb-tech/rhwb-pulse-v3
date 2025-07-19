@@ -85,7 +85,7 @@ function getBearerToken(): string | null {
 }
 
 // Set up postMessage listener for Bearer token from parent window
-function setupBearerTokenListener(): void {
+function setupBearerTokenListener(): (() => void) | undefined {
   if (typeof window !== 'undefined') {
     const handleMessage = (event: MessageEvent) => {
       // Verify origin for security (adjust domains as needed)
@@ -105,6 +105,8 @@ function setupBearerTokenListener(): void {
     // Cleanup function
     return () => window.removeEventListener('message', handleMessage);
   }
+  
+  return undefined;
 }
 
 // JWT signature verification utility
