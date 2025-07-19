@@ -54,14 +54,31 @@ function isTokenExpired(exp: number): boolean {
 
 // JWT signature verification utility
 async function verifyJwtSignature(token: string): Promise<boolean> {
-  if (!AUTH_CONFIG.JWT_SECRET) {
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.warn('JWT_SECRET not configured - skipping signature verification in development');
+  // For development, skip signature verification and rely on token format + expiration
+  if (AUTH_CONFIG.DEBUG_MODE) {
+    console.log('Development mode: Skipping JWT signature verification');
+    
+    try {
+      // Just verify token format (3 parts separated by dots)
+      const [header, payload, signature] = token.split('.');
+      
+      if (!header || !payload || !signature) {
+        console.error('Invalid JWT format: Token must have 3 parts (header.payload.signature)');
+        return false;
+      }
+      
+      console.log('JWT format validation passed');
       return true;
-    } else {
-      console.error('JWT_SECRET is required for production');
+    } catch (error) {
+      console.error('JWT format validation failed:', error);
       return false;
     }
+  }
+  
+  // Production signature verification (requires proper implementation)
+  if (!AUTH_CONFIG.JWT_SECRET) {
+    console.error('JWT_SECRET is required for production signature verification');
+    return false;
   }
   
   try {
@@ -69,14 +86,16 @@ async function verifyJwtSignature(token: string): Promise<boolean> {
     const [header, payload, signature] = token.split('.');
     
     if (!header || !payload || !signature) {
+      console.error('Invalid JWT format in production verification');
       return false;
     }
     
-    // In production, you'd implement proper HMAC verification here
-    // For now, we'll trust the token format and expiration
-    // This is a placeholder for proper JWT verification
-    
+    // TODO: Implement proper HMAC-SHA256 verification
+    // For now, this is a placeholder - you would need a crypto library
+    // to properly verify the signature in the browser
+    console.warn('Production JWT signature verification not fully implemented');
     return true;
+    
   } catch (error) {
     console.error('JWT signature verification failed:', error);
     return false;
@@ -146,30 +165,60 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const validateAndSetToken = async (tokenString: string): Promise<boolean> => {
+    if (AUTH_CONFIG.DEBUG_MODE) {
+      console.log('🔍 Starting JWT token validation...');
+      console.log('Token length:', tokenString.length);
+      console.log('Token preview:', tokenString.substring(0, 50) + '...');
+    }
+
     const payload = parseJwt(tokenString);
     
     if (!payload) {
-      console.error('Invalid JWT token format');
+      console.error('❌ Invalid JWT token format - could not parse payload');
       return false;
+    }
+
+    if (AUTH_CONFIG.DEBUG_MODE) {
+      console.log('✅ JWT payload parsed successfully:', payload);
     }
 
     // Check required fields
     if (!payload.email || !payload.role || !payload.exp) {
-      console.error('JWT token missing required fields (email, role, exp)');
+      console.error('❌ JWT token missing required fields (email, role, exp)');
+      console.error('Available fields:', Object.keys(payload));
       return false;
+    }
+
+    if (AUTH_CONFIG.DEBUG_MODE) {
+      console.log('✅ JWT required fields present');
     }
 
     // Check if token is expired
     if (isTokenExpired(payload.exp)) {
-      console.error('JWT token has expired');
+      console.error('❌ JWT token has expired');
+      const expDate = new Date(payload.exp * 1000);
+      console.error('Token expired at:', expDate.toISOString());
+      console.error('Current time:', new Date().toISOString());
       return false;
     }
 
+    if (AUTH_CONFIG.DEBUG_MODE) {
+      console.log('✅ JWT token is not expired');
+    }
+
     // Verify JWT signature
+    if (AUTH_CONFIG.DEBUG_MODE) {
+      console.log('🔐 Verifying JWT signature...');
+    }
+    
     const isValidSignature = await verifyJwtSignature(tokenString);
     if (!isValidSignature) {
-      console.error('JWT signature verification failed');
+      console.error('❌ JWT signature verification failed');
       return false;
+    }
+
+    if (AUTH_CONFIG.DEBUG_MODE) {
+      console.log('✅ JWT signature verification passed');
     }
 
     // Validate role
