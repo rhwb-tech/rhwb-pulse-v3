@@ -30,121 +30,7 @@ Your JWT token must include the following claims:
 
 ## Wix Implementation Options
 
-### Option 1: Bearer Token via postMessage (Recommended for Production)
-
-Pass the JWT token as a Bearer token via postMessage when embedding the dashboard in an iframe:
-
-```javascript
-// In your Wix site code (iframe parent)
-import wixSecrets from 'wix-secrets-backend';
-import { sign } from 'jsonwebtoken';
-
-export async function embedDashboardWithBearer(userEmail, userRole) {
-  // Get your JWT secret from Wix Secrets Manager
-  const jwtSecret = await wixSecrets.getSecret('JWT_SECRET');
-  
-  // Create JWT payload
-  const payload = {
-    email: userEmail,
-    role: userRole,
-    name: 'User Name', // Optional
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24) // 24 hours expiration
-  };
-  
-  // Sign the token
-  const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
-  
-  // Send Bearer token to dashboard iframe (stores as pulse_token)
-  const iframe = document.getElementById('dashboard-iframe');
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.postMessage({
-      type: 'BEARER_TOKEN',
-      token: token // Will be stored as sessionStorage['pulse_token']
-    }, 'https://your-dashboard-domain.com');
-  }
-}
-
-// Usage in Wix page code
-$w.onReady(function () {
-  // Load the dashboard iframe first
-  $w("#dashboardFrame").src = "https://your-dashboard-domain.com";
-  
-  // Send Bearer token after iframe loads
-  $w("#dashboardFrame").onLoad(() => {
-    setTimeout(async () => {
-      const userEmail = $w("#emailInput").value;
-      const userRole = $w("#roleDropdown").value;
-      await embedDashboardWithBearer(userEmail, userRole);
-    }, 1000); // Give iframe time to initialize
-  });
-});
-```
-
-### Option 2: Bearer Token via sessionStorage (pulse_token)
-
-Store the Bearer token directly in sessionStorage as `pulse_token`:
-
-```javascript
-// In your Wix site code
-import wixSecrets from 'wix-secrets-backend';
-import { sign } from 'jsonwebtoken';
-
-export async function setDashboardBearerToken(userEmail, userRole) {
-  const jwtSecret = await wixSecrets.getSecret('JWT_SECRET');
-  
-  const payload = {
-    email: userEmail,
-    role: userRole,
-    name: 'User Name',
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24)
-  };
-  
-  const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
-  
-  // Store token in sessionStorage as pulse_token (primary method)
-  sessionStorage.setItem('pulse_token', token);
-  
-  // Then redirect to dashboard
-  wixLocation.to('https://your-dashboard-domain.com');
-}
-
-// Alternative: Set token before iframe load
-export async function loadDashboardWithToken(userEmail, userRole) {
-  const jwtSecret = await wixSecrets.getSecret('JWT_SECRET');
-  
-  const payload = {
-    email: userEmail,
-    role: userRole,
-    name: 'User Name',
-    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24)
-  };
-  
-  const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
-  
-  // Set token in sessionStorage before loading iframe
-  sessionStorage.setItem('pulse_token', token);
-  
-  // Load dashboard iframe
-  $w("#dashboardFrame").src = "https://your-dashboard-domain.com";
-}
-
-// Usage
-$w.onReady(function () {
-  $w("#launchDashboard").onClick(async () => {
-    const userEmail = $w("#userEmail").value;
-    const userRole = $w("#userRole").value;
-    await setDashboardBearerToken(userEmail, userRole);
-  });
-  
-  $w("#loadInFrame").onClick(async () => {
-    const userEmail = $w("#userEmail").value;
-    const userRole = $w("#userRole").value;
-    await loadDashboardWithToken(userEmail, userRole);
-  });
-});
-```
-
-### Option 3: URL Parameter (Fallback for Direct Links)
+### Option 1: URL Parameter (Recommended for Initial Setup)
 
 Pass the JWT token as a URL parameter when redirecting to the dashboard:
 
@@ -188,7 +74,7 @@ $w.onReady(function () {
 });
 ```
 
-### Option 4: Wix Velo Backend Integration
+### Option 2: Wix Velo Backend Integration
 
 Create a backend function to generate tokens:
 
@@ -262,7 +148,7 @@ $w.onReady(function () {
 });
 ```
 
-### Option 5: Wix Members Integration
+### Option 3: Wix Members Integration
 
 Integrate with Wix Members for automatic user detection:
 
@@ -347,9 +233,6 @@ REACT_APP_JWT_SECRET=your-same-secret-from-wix
 REACT_APP_TOKEN_STORAGE_KEY=rhwb_pulse_auth_token
 REACT_APP_TOKEN_EXPIRY_BUFFER=300
 
-# Bearer Token Configuration (Optional)
-REACT_APP_WIX_ORIGIN=https://your-wix-site.com
-
 # Optional: Supabase Configuration
 REACT_APP_SUPABASE_URL=your-supabase-url
 REACT_APP_SUPABASE_ANON_KEY=your-supabase-anon-key
@@ -359,16 +242,10 @@ REACT_APP_SUPABASE_ANON_KEY=your-supabase-anon-key
 
 The dashboard checks for JWT tokens in the following priority order:
 
-1. **sessionStorage['pulse_token']** - Primary Bearer token location
-2. **Bearer Token** (via postMessage or custom storage) - `getBearerToken()`
-3. **URL Parameter** - `?token=JWT_TOKEN`
-4. **Local Storage** - Previously stored token
+1. **URL Parameter** - `?token=JWT_TOKEN`
+2. **Local Storage** - Previously stored token
 
-The `pulse_token` in sessionStorage is the **recommended approach** for Wix integration as it:
-- Provides secure token storage within the session
-- Works seamlessly with iframe embedding
-- Automatically expires when the browser session ends
-- Avoids URL parameter exposure
+This simple approach ensures reliable token handling while maintaining security through JWT expiration and signature verification.
 
 ## Example JWT Payloads
 

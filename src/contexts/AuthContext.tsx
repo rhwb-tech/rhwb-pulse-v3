@@ -51,71 +51,6 @@ function isTokenExpired(exp: number): boolean {
   return Date.now() >= (exp * 1000) - (bufferTime * 1000);
 }
 
-// Get JWT token from Bearer token via sessionStorage (pulse_token)
-function getBearerToken(): string | null {
-  try {
-    // Priority 1: Check for pulse_token in sessionStorage (primary method)
-    const pulseToken = sessionStorage.getItem('pulse_token');
-    if (pulseToken) {
-      return pulseToken.startsWith('Bearer ') ? pulseToken.substring(7) : pulseToken;
-    }
-
-    // Priority 2: Check for Bearer token from postMessage communication (fallback)
-    const bearerToken = sessionStorage.getItem('bearer_auth_token') || 
-                       localStorage.getItem('bearer_auth_token');
-    if (bearerToken) {
-      return bearerToken.startsWith('Bearer ') ? bearerToken.substring(7) : bearerToken;
-    }
-
-    // Priority 3: Check if we're in an iframe and listen for Bearer token from parent
-    if (window.parent && window.parent !== window) {
-      // Check for pre-stored Bearer token from parent communication
-      const iframeBearerToken = sessionStorage.getItem('iframe_bearer_token');
-      if (iframeBearerToken) {
-        return iframeBearerToken.startsWith('Bearer ') ? iframeBearerToken.substring(7) : iframeBearerToken;
-      }
-    }
-
-    // Priority 4: Check for custom Bearer token storage (legacy)
-    const customBearerToken = sessionStorage.getItem('wix_bearer_token') || 
-                             localStorage.getItem('wix_bearer_token');
-    if (customBearerToken) {
-      return customBearerToken.startsWith('Bearer ') ? customBearerToken.substring(7) : customBearerToken;
-    }
-    
-    return null;
-  } catch (error) {
-    console.warn('Could not access bearer token:', error);
-    return null;
-  }
-}
-
-// Set up postMessage listener for Bearer token from parent window
-function setupBearerTokenListener(): (() => void) | undefined {
-  if (typeof window !== 'undefined') {
-    const handleMessage = (event: MessageEvent) => {
-      // Verify origin for security (adjust domains as needed)
-      const allowedOrigins = ['https://www.wix.com', 'https://manage.wix.com', process.env.REACT_APP_WIX_ORIGIN];
-      if (allowedOrigins.includes(event.origin)) {
-        if (event.data?.type === 'BEARER_TOKEN' && event.data?.token) {
-          const token = event.data.token.startsWith('Bearer ') ? event.data.token.substring(7) : event.data.token;
-          // Store in primary location (pulse_token) and fallback location
-          sessionStorage.setItem('pulse_token', token);
-          sessionStorage.setItem('iframe_bearer_token', token);
-          // Trigger re-initialization of auth
-          window.dispatchEvent(new CustomEvent('bearer-token-received'));
-        }
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    
-    // Cleanup function
-    return () => window.removeEventListener('message', handleMessage);
-  }
-  
-  return undefined;
-}
 
 // JWT signature verification utility
 async function verifyJwtSignature(token: string): Promise<boolean> {
@@ -157,60 +92,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Set up Bearer token listener on component mount
-  useEffect(() => {
-    const cleanup = setupBearerTokenListener();
-    
-    // Listen for Bearer token received event
-    const handleBearerTokenReceived = () => {
-      // Re-initialize auth when Bearer token is received
-      const initializeAuth = async () => {
-        const bearerToken = getBearerToken();
-        if (bearerToken) {
-          const success = await validateAndSetToken(bearerToken);
-          if (success) {
-            localStorage.setItem(AUTH_CONFIG.TOKEN_STORAGE_KEY, bearerToken);
-            if (AUTH_CONFIG.DEBUG_MODE) {
-              console.log('JWT token loaded from: bearer (postMessage)');
-            }
-          }
-        }
-      };
-      initializeAuth();
-    };
 
-    window.addEventListener('bearer-token-received', handleBearerTokenReceived);
-    
-    return () => {
-      if (cleanup) cleanup();
-      window.removeEventListener('bearer-token-received', handleBearerTokenReceived);
-    };
-  }, []);
-
-  // Initialize auth state from stored token, URL, or Authorization header
+  // Initialize auth state from stored token or URL parameter
   useEffect(() => {
     const initializeAuth = async () => {
       let tokenToUse = null;
       let tokenSource = '';
       
-      // Priority 1: Check Bearer token (from postMessage or custom storage)
-      const bearerToken = getBearerToken();
-      if (bearerToken) {
-        tokenToUse = bearerToken;
-        tokenSource = 'bearer';
+      // Priority 1: Check URL parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlToken = urlParams.get('token');
+      if (urlToken) {
+        tokenToUse = urlToken;
+        tokenSource = 'url';
       }
       
-      // Priority 2: Check URL parameter (fallback for direct links)
-      if (!tokenToUse) {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlToken = urlParams.get('token');
-        if (urlToken) {
-          tokenToUse = urlToken;
-          tokenSource = 'url';
-        }
-      }
-      
-      // Priority 3: Check stored token
+      // Priority 2: Check stored token
       if (!tokenToUse) {
         const storedToken = localStorage.getItem(AUTH_CONFIG.TOKEN_STORAGE_KEY);
         if (storedToken) {
@@ -222,8 +119,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (tokenToUse) {
         const success = await validateAndSetToken(tokenToUse);
         if (success) {
-          // Store token if it came from bearer or URL
-          if (tokenSource === 'bearer' || tokenSource === 'url') {
+          // Store token if it came from URL
+          if (tokenSource === 'url') {
             localStorage.setItem(AUTH_CONFIG.TOKEN_STORAGE_KEY, tokenToUse);
           }
           
