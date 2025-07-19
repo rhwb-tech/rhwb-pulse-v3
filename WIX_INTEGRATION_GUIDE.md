@@ -54,12 +54,12 @@ export async function embedDashboardWithBearer(userEmail, userRole) {
   // Sign the token
   const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
   
-  // Send Bearer token to dashboard iframe
+  // Send Bearer token to dashboard iframe (stores as pulse_token)
   const iframe = document.getElementById('dashboard-iframe');
   if (iframe && iframe.contentWindow) {
     iframe.contentWindow.postMessage({
       type: 'BEARER_TOKEN',
-      token: token // Will be automatically prefixed with 'Bearer ' if needed
+      token: token // Will be stored as sessionStorage['pulse_token']
     }, 'https://your-dashboard-domain.com');
   }
 }
@@ -80,9 +80,9 @@ $w.onReady(function () {
 });
 ```
 
-### Option 2: Bearer Token via Custom Storage
+### Option 2: Bearer Token via sessionStorage (pulse_token)
 
-Store the Bearer token in a way the dashboard can access:
+Store the Bearer token directly in sessionStorage as `pulse_token`:
 
 ```javascript
 // In your Wix site code
@@ -101,15 +101,31 @@ export async function setDashboardBearerToken(userEmail, userRole) {
   
   const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
   
-  // Store Bearer token for dashboard to access
-  // Option A: Via sessionStorage (if same-origin)
-  sessionStorage.setItem('bearer_auth_token', token);
-  
-  // Option B: Via custom storage mechanism
-  localStorage.setItem('wix_bearer_token', `Bearer ${token}`);
+  // Store token in sessionStorage as pulse_token (primary method)
+  sessionStorage.setItem('pulse_token', token);
   
   // Then redirect to dashboard
   wixLocation.to('https://your-dashboard-domain.com');
+}
+
+// Alternative: Set token before iframe load
+export async function loadDashboardWithToken(userEmail, userRole) {
+  const jwtSecret = await wixSecrets.getSecret('JWT_SECRET');
+  
+  const payload = {
+    email: userEmail,
+    role: userRole,
+    name: 'User Name',
+    exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24)
+  };
+  
+  const token = sign(payload, jwtSecret, { algorithm: 'HS256' });
+  
+  // Set token in sessionStorage before loading iframe
+  sessionStorage.setItem('pulse_token', token);
+  
+  // Load dashboard iframe
+  $w("#dashboardFrame").src = "https://your-dashboard-domain.com";
 }
 
 // Usage
@@ -118,6 +134,12 @@ $w.onReady(function () {
     const userEmail = $w("#userEmail").value;
     const userRole = $w("#userRole").value;
     await setDashboardBearerToken(userEmail, userRole);
+  });
+  
+  $w("#loadInFrame").onClick(async () => {
+    const userEmail = $w("#userEmail").value;
+    const userRole = $w("#userRole").value;
+    await loadDashboardWithToken(userEmail, userRole);
   });
 });
 ```
@@ -337,11 +359,16 @@ REACT_APP_SUPABASE_ANON_KEY=your-supabase-anon-key
 
 The dashboard checks for JWT tokens in the following priority order:
 
-1. **Bearer Token** (via postMessage or custom storage) - `getBearerToken()`
-2. **URL Parameter** - `?token=JWT_TOKEN`
-3. **Local Storage** - Previously stored token
+1. **sessionStorage['pulse_token']** - Primary Bearer token location
+2. **Bearer Token** (via postMessage or custom storage) - `getBearerToken()`
+3. **URL Parameter** - `?token=JWT_TOKEN`
+4. **Local Storage** - Previously stored token
 
-This allows for flexible integration patterns where Bearer tokens take precedence over URL parameters.
+The `pulse_token` in sessionStorage is the **recommended approach** for Wix integration as it:
+- Provides secure token storage within the session
+- Works seamlessly with iframe embedding
+- Automatically expires when the browser session ends
+- Avoids URL parameter exposure
 
 ## Example JWT Payloads
 

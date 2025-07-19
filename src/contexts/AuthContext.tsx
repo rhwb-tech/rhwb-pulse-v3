@@ -51,17 +51,23 @@ function isTokenExpired(exp: number): boolean {
   return Date.now() >= (exp * 1000) - (bufferTime * 1000);
 }
 
-// Get JWT token from Bearer token via postMessage or custom storage
+// Get JWT token from Bearer token via sessionStorage (pulse_token)
 function getBearerToken(): string | null {
   try {
-    // Method 1: Check for Bearer token from postMessage communication
+    // Priority 1: Check for pulse_token in sessionStorage (primary method)
+    const pulseToken = sessionStorage.getItem('pulse_token');
+    if (pulseToken) {
+      return pulseToken.startsWith('Bearer ') ? pulseToken.substring(7) : pulseToken;
+    }
+
+    // Priority 2: Check for Bearer token from postMessage communication (fallback)
     const bearerToken = sessionStorage.getItem('bearer_auth_token') || 
                        localStorage.getItem('bearer_auth_token');
     if (bearerToken) {
       return bearerToken.startsWith('Bearer ') ? bearerToken.substring(7) : bearerToken;
     }
 
-    // Method 2: Check if we're in an iframe and listen for Bearer token from parent
+    // Priority 3: Check if we're in an iframe and listen for Bearer token from parent
     if (window.parent && window.parent !== window) {
       // Check for pre-stored Bearer token from parent communication
       const iframeBearerToken = sessionStorage.getItem('iframe_bearer_token');
@@ -70,7 +76,7 @@ function getBearerToken(): string | null {
       }
     }
 
-    // Method 3: Check for custom Bearer token storage
+    // Priority 4: Check for custom Bearer token storage (legacy)
     const customBearerToken = sessionStorage.getItem('wix_bearer_token') || 
                              localStorage.getItem('wix_bearer_token');
     if (customBearerToken) {
@@ -93,6 +99,8 @@ function setupBearerTokenListener(): (() => void) | undefined {
       if (allowedOrigins.includes(event.origin)) {
         if (event.data?.type === 'BEARER_TOKEN' && event.data?.token) {
           const token = event.data.token.startsWith('Bearer ') ? event.data.token.substring(7) : event.data.token;
+          // Store in primary location (pulse_token) and fallback location
+          sessionStorage.setItem('pulse_token', token);
           sessionStorage.setItem('iframe_bearer_token', token);
           // Trigger re-initialization of auth
           window.dispatchEvent(new CustomEvent('bearer-token-received'));
