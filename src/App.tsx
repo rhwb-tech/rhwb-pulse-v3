@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, IconButton, Drawer, Chip, Stack, Skeleton, Tabs, Tab, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
+import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, Chip, Stack, Skeleton, FormControl, InputLabel, Select, MenuItem, Menu, ListItemText } from '@mui/material';
 import QuantitativeScores, { QuantitativeScoreData } from './components/QuantitativeScores';
 import FilterPanel, { UserRole } from './components/FilterPanel';
 import { supabase } from './components/supabaseClient';
 import CumulativeScore from './components/CumulativeScore';
 import ActivitySummary from './components/ActivitySummary';
+import TrainingFeedback from './components/TrainingFeedback';
 import { useAuth } from './contexts/AuthContext';
 
 interface Option {
@@ -52,8 +52,49 @@ function App() {
 
   // Track if initial load has occurred
   const [initialLoad, setInitialLoad] = useState(true);
+  
+  // Season dropdown state
+  const [seasonMenuAnchor, setSeasonMenuAnchor] = useState<null | HTMLElement>(null);
+  const seasonMenuOpen = Boolean(seasonMenuAnchor);
+  const [seasonOptions, setSeasonOptions] = useState<Option[]>([]);
+  
+  // Runner dropdown state
+  const [runnerMenuAnchor, setRunnerMenuAnchor] = useState<null | HTMLElement>(null);
+  const runnerMenuOpen = Boolean(runnerMenuAnchor);
+  
+  // Hybrid toggle dropdown state
+  const [hybridToggleMenuAnchor, setHybridToggleMenuAnchor] = useState<null | HTMLElement>(null);
+  const hybridToggleMenuOpen = Boolean(hybridToggleMenuAnchor);
 
   // Authentication is now handled by JWT context
+
+  // Fetch available seasons
+  useEffect(() => {
+    const fetchSeasons = async () => {
+      const { data: seasons, error } = await supabase
+        .from('rhwb_meso_scores')
+        .select('season')
+        .not('season', 'is', null);
+      
+      if (error) {
+        console.error('Error fetching seasons:', error);
+        return;
+      }
+      
+      // Extract unique seasons and sort them in descending order
+      const uniqueSeasons = Array.from(new Set(seasons?.map(s => s.season) || []))
+        .filter(season => season && season.includes('Season'))
+        .map(season => {
+          const seasonNumber = season.replace('Season ', '');
+          return { value: seasonNumber, label: season };
+        })
+        .sort((a, b) => parseInt(b.value) - parseInt(a.value)); // Sort descending
+      
+      setSeasonOptions(uniqueSeasons);
+    };
+    
+    fetchSeasons();
+  }, []);
 
   // Fetch coach name for coach/hybrid roles
   useEffect(() => {
@@ -222,10 +263,56 @@ function App() {
     setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
   };
 
+  // Season dropdown handlers
+  const handleSeasonMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setSeasonMenuAnchor(event.currentTarget);
+  };
+
+  const handleSeasonMenuClose = () => {
+    setSeasonMenuAnchor(null);
+  };
+
+  const handleSeasonChange = (newSeason: string) => {
+    setSeason(newSeason);
+    setSeasonMenuAnchor(null);
+    setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+  };
+
+  // Runner dropdown handlers
+  const handleRunnerMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setRunnerMenuAnchor(event.currentTarget);
+  };
+
+  const handleRunnerMenuClose = () => {
+    setRunnerMenuAnchor(null);
+  };
+
+  const handleRunnerChangeFromChip = (newRunner: string) => {
+    setSelectedRunner(newRunner);
+    setRunnerMenuAnchor(null);
+    setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+  };
+
+  // Hybrid toggle dropdown handlers
+  const handleHybridToggleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setHybridToggleMenuAnchor(event.currentTarget);
+  };
+
+  const handleHybridToggleMenuClose = () => {
+    setHybridToggleMenuAnchor(null);
+  };
+
+  const handleHybridToggleChangeFromChip = (newToggle: 'myScore' | 'myCohorts') => {
+    setHybridToggle(newToggle);
+    setHybridToggleMenuAnchor(null);
+    setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+  };
+
   // Determine which props to show in FilterPanel
   const filterPanelProps: any = {
     season,
     onSeasonChange: setSeason,
+    seasonOptions,
     email,
     onApply: handleApply,
     onClear: handleClear,
@@ -286,9 +373,9 @@ function App() {
     fetchCumulativeScore();
   }, [fetchCumulativeScore]);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [mileagePercent, setMileagePercent] = useState<number | null>(null);
   const [strengthPercent, setStrengthPercent] = useState<number | null>(null);
+  const [trainingFeedback, setTrainingFeedback] = useState<Array<{meso: string, qual: string}>>([]);
 
   // Fetch Activity Summary data for the selected runner (or logged-in user)
   const fetchActivitySummary = useCallback(async () => {
@@ -319,9 +406,41 @@ function App() {
     setStrengthPercent(strength);
   }, [selectedRunner, email, season]);
 
+  // Fetch Training Feedback data for the selected runner (or logged-in user)
+  const fetchTrainingFeedback = useCallback(async () => {
+    const runnerEmail = selectedRunner || email;
+    if (!runnerEmail) {
+      setTrainingFeedback([]);
+      return;
+    }
+    // Fetch training feedback for this runner and season
+    const { data: rows, error } = await supabase
+      .from('rhwb_meso_scores')
+      .select('meso, qual')
+      .eq('season', `Season ${season}`)
+      .eq('email_id', runnerEmail)
+      .eq('category', 'Personal')
+      .not('qual', 'is', null);
+    if (error || !rows) {
+      setTrainingFeedback([]);
+      return;
+    }
+    // Sort by meso in descending order (extract number from meso string)
+    const sortedRows = rows.sort((a, b) => {
+      const mesoA = parseInt(a.meso.replace(/[^0-9]/g, ''), 10);
+      const mesoB = parseInt(b.meso.replace(/[^0-9]/g, ''), 10);
+      return mesoB - mesoA; // Descending order
+    });
+    setTrainingFeedback(sortedRows);
+  }, [selectedRunner, email, season]);
+
   useEffect(() => {
     fetchActivitySummary();
   }, [fetchActivitySummary]);
+
+  useEffect(() => {
+    fetchTrainingFeedback();
+  }, [fetchTrainingFeedback]);
 
   const getRoleDisplayName = (role: UserRole) => {
     switch (role) {
@@ -337,20 +456,6 @@ function App() {
       {/* AppBar with Hamburger Menu */}
       <AppBar position="static" color="default" elevation={1} sx={{ mb: 3 }}>
         <Toolbar>
-          <IconButton 
-            edge="start" 
-            color="inherit" 
-            aria-label="menu" 
-            onClick={() => setDrawerOpen(true)} 
-            sx={{ 
-              mr: 2,
-              minWidth: 48,
-              minHeight: 48,
-              '&:hover': { bgcolor: 'action.hover' }
-            }}
-          >
-            <MenuIcon />
-          </IconButton>
           <Typography variant="h5" component="h1" sx={{ flexGrow: 1 }}>
             Pulse
           </Typography>
@@ -378,6 +483,7 @@ function App() {
         <Stack direction="row" spacing={2} sx={{ minWidth: 'fit-content' }}>
           <Chip
             label={`Season ${season}`}
+            onClick={handleSeasonMenuOpen}
             sx={{
               bgcolor: '#e3f2fd',
               color: '#1976d2',
@@ -388,12 +494,60 @@ function App() {
               py: 1,
               minWidth: 'fit-content',
               whiteSpace: 'nowrap',
+              cursor: 'pointer',
+              '&:hover': {
+                bgcolor: '#bbdefb',
+              },
             }}
           />
-          {/* Show runner chip if selected */}
-          {selectedRunner && (
+          <Menu
+            anchorEl={seasonMenuAnchor}
+            open={seasonMenuOpen}
+            onClose={handleSeasonMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                minWidth: 120,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                borderRadius: 2,
+                border: '1px solid #e0e0e0',
+              }
+            }}
+          >
+            {seasonOptions.map((seasonOption) => (
+              <MenuItem
+                key={seasonOption.value}
+                onClick={() => handleSeasonChange(seasonOption.value)}
+                selected={season === seasonOption.value}
+                sx={{
+                  minHeight: 40,
+                  '&.Mui-selected': {
+                    bgcolor: '#e3f2fd',
+                    color: '#1976d2',
+                    fontWeight: 600,
+                  },
+                  '&:hover': {
+                    bgcolor: '#f5f5f5',
+                  },
+                }}
+              >
+                <ListItemText primary={seasonOption.label} />
+              </MenuItem>
+            ))}
+          </Menu>
+          {/* Show hybrid toggle chip for hybrid users */}
+          {userRole === 'hybrid' && (
             <Chip
-              label={runnerList.find(r => r.value === selectedRunner)?.label || selectedRunner}
+              label={hybridToggle === 'myScore' ? 'My Score' : 'My Cohorts'}
+              onClick={handleHybridToggleMenuOpen}
               sx={{
                 bgcolor: '#e3f2fd',
                 color: '#1976d2',
@@ -404,9 +558,125 @@ function App() {
                 py: 1,
                 minWidth: 'fit-content',
                 whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                '&:hover': {
+                  bgcolor: '#bbdefb',
+                },
               }}
             />
           )}
+          <Menu
+            anchorEl={hybridToggleMenuAnchor}
+            open={hybridToggleMenuOpen}
+            onClose={handleHybridToggleMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                minWidth: 150,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                borderRadius: 2,
+                border: '1px solid #e0e0e0',
+              }
+            }}
+          >
+            {[
+              { value: 'myScore', label: 'My Score' },
+              { value: 'myCohorts', label: 'My Cohorts' }
+            ].map((toggleOption) => (
+              <MenuItem
+                key={toggleOption.value}
+                onClick={() => handleHybridToggleChangeFromChip(toggleOption.value as 'myScore' | 'myCohorts')}
+                selected={hybridToggle === toggleOption.value}
+                sx={{
+                  minHeight: 40,
+                  '&.Mui-selected': {
+                    bgcolor: '#e3f2fd',
+                    color: '#1976d2',
+                    fontWeight: 600,
+                  },
+                  '&:hover': {
+                    bgcolor: '#f5f5f5',
+                  },
+                }}
+              >
+                <ListItemText primary={toggleOption.label} />
+              </MenuItem>
+            ))}
+          </Menu>
+          {/* Show runner chip if selected */}
+          {selectedRunner && (
+            <Chip
+              label={runnerList.find(r => r.value === selectedRunner)?.label || selectedRunner}
+              onClick={handleRunnerMenuOpen}
+              sx={{
+                bgcolor: '#e3f2fd',
+                color: '#1976d2',
+                fontWeight: 600,
+                fontSize: { xs: 14, sm: 16, md: 18 },
+                borderRadius: 999,
+                px: 2,
+                py: 1,
+                minWidth: 'fit-content',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                '&:hover': {
+                  bgcolor: '#bbdefb',
+                },
+              }}
+            />
+          )}
+          <Menu
+            anchorEl={runnerMenuAnchor}
+            open={runnerMenuOpen}
+            onClose={handleRunnerMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                minWidth: 200,
+                maxHeight: 300,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                borderRadius: 2,
+                border: '1px solid #e0e0e0',
+              }
+            }}
+          >
+            {runnerList.map((runnerOption) => (
+              <MenuItem
+                key={runnerOption.value}
+                onClick={() => handleRunnerChangeFromChip(runnerOption.value)}
+                selected={selectedRunner === runnerOption.value}
+                sx={{
+                  minHeight: 40,
+                  '&.Mui-selected': {
+                    bgcolor: '#e3f2fd',
+                    color: '#1976d2',
+                    fontWeight: 600,
+                  },
+                  '&:hover': {
+                    bgcolor: '#f5f5f5',
+                  },
+                }}
+              >
+                <ListItemText primary={runnerOption.label} />
+              </MenuItem>
+            ))}
+          </Menu>
           {/* Show coach chip for admin if selected */}
           {userRole === 'admin' && selectedCoach && (
             <Chip
@@ -426,53 +696,8 @@ function App() {
           )}
         </Stack>
       </Box>
-      {/* Drawer for Filters */}
-      <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <Box sx={{ width: 320, p: 2 }} role="presentation" onClick={() => setDrawerOpen(false)}>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Filters
-          </Typography>
-          <FilterPanel {...filterPanelProps} />
-        </Box>
-      </Drawer>
-      {/* Hybrid Tabs */}
-      {userRole === 'hybrid' && (
-        <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Tabs
-            value={hybridToggle === 'myScore' ? 0 : 1}
-            onChange={(_, val) => setHybridToggle(val === 0 ? 'myScore' : 'myCohorts')}
-            aria-label="Hybrid Tabs"
-            sx={{ mb: 2 }}
-          >
-            <Tab label="My Score" sx={{ minWidth: 120, minHeight: 48 }} />
-            <Tab label="My Cohorts" sx={{ minWidth: 120, minHeight: 48 }} />
-          </Tabs>
-          {/* Runner list dropdown for My Cohorts */}
-          {hybridToggle === 'myCohorts' && (
-            <Box sx={{ minWidth: 220 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel id="runner-label">Runner</InputLabel>
-                <Select
-                  labelId="runner-label"
-                  value={selectedRunner}
-                  label="Runner"
-                  onChange={e => handleRunnerChange(e.target.value)}
-                  sx={{ minHeight: 40 }}
-                >
-                  {runnerList.map(opt => (
-                    <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>{opt.label}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              {runnerList.length === 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1, textAlign: 'center' }}>
-                  No runners available for this coach and season.
-                </Typography>
-              )}
-            </Box>
-          )}
-        </Box>
-      )}
+
+
 
       {/* Dashboard Container with header and widgets */}
       <Box sx={{
@@ -603,8 +828,88 @@ function App() {
                 />
               </Box>
             </Grid>
+            {/* Training Feedback Widget - Full width */}
+            <Grid item xs={12}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: '4px solid #1976d2', 
+                borderRadius: 2, 
+                bgcolor: 'white',
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
+                <TrainingFeedback feedback={trainingFeedback} />
+              </Box>
+            </Grid>
           </Grid>
         )}
+        
+        {/* Debug Section */}
+        <Box sx={{ mt: 4, p: 3, bgcolor: '#f5f5f5', borderRadius: 2, border: '1px solid #ddd' }}>
+          <Typography variant="h6" gutterBottom sx={{ color: '#666', fontWeight: 600 }}>
+            Debug Information
+          </Typography>
+          <Box sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#333' }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Current Filters:</strong>
+            </Typography>
+            <Box sx={{ ml: 2, mb: 2 }}>
+              <Typography variant="body2">Season: {season}</Typography>
+              <Typography variant="body2">Email: {selectedRunner || email}</Typography>
+              <Typography variant="body2">User Role: {userRole}</Typography>
+              {selectedCoach && <Typography variant="body2">Coach: {selectedCoach}</Typography>}
+              {userRole === 'hybrid' && <Typography variant="body2">Hybrid Toggle: {hybridToggle}</Typography>}
+            </Box>
+            
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>SQL Queries:</strong>
+            </Typography>
+            <Box sx={{ ml: 2 }}>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Quantitative Scores:</strong>
+              </Typography>
+              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+{getQuantSql(season, selectedRunner || email)}
+                </Typography>
+              </Box>
+              
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Training Feedback:</strong>
+              </Typography>
+              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT meso, qual FROM rhwb_meso_scores 
+WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
+AND category = 'Personal' AND qual IS NOT NULL
+ORDER BY CAST(REPLACE(meso, 'Meso ', '') AS INTEGER) DESC
+                </Typography>
+              </Box>
+              
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Cumulative Score:</strong>
+              </Typography>
+              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT email_id, season, meso, cumulative_score FROM rhwb_meso_scores 
+WHERE email_id = '{selectedRunner || email}' 
+AND season = 'Season {season}' 
+AND category = 'Personal'
+                </Typography>
+              </Box>
+              
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                <strong>Activity Summary:</strong>
+              </Typography>
+              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT category, percent_completed FROM v_activity_summary 
+WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
+                </Typography>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
       </Box>
     </Container>
   );

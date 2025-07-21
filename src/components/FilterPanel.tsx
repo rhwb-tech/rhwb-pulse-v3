@@ -13,6 +13,7 @@ interface Option {
 interface FilterPanelProps {
   season: string;
   onSeasonChange: (value: string) => void;
+  seasonOptions?: Option[];
   userRole: UserRole;
   coachList?: Option[];
   runnerList?: Option[];
@@ -35,6 +36,7 @@ const SEASON_OPTIONS = [
 const FilterPanel: React.FC<FilterPanelProps> = ({
   season,
   onSeasonChange,
+  seasonOptions = SEASON_OPTIONS,
   userRole,
   coachList = [],
   runnerList = [],
@@ -65,7 +67,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               onChange={e => onSeasonChange(e.target.value)}
               sx={{ minHeight: 40 }}
             >
-              {SEASON_OPTIONS.map(opt => (
+              {seasonOptions.map(opt => (
                 <MenuItem key={opt.value} value={opt.value} sx={{ minHeight: 40 }}>{opt.label}</MenuItem>
               ))}
             </Select>
