@@ -1,15 +1,54 @@
 import React from 'react';
 import { Box, Typography, Card, CardContent, Chip, Stack } from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import FavoriteIcon from '@mui/icons-material/Favorite';
-import StarIcon from '@mui/icons-material/Star';
+import { supabase } from './supabaseClient';
 
 interface TrainingFeedbackProps {
   feedback: Array<{meso: string, qual: string}>;
+  userEmail?: string;
 }
 
-const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback }) => {
+const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail }) => {
+  const [clickedIcons, setClickedIcons] = React.useState<Set<string>>(new Set());
+
+  const handleIconClick = async (eventName: string, valueText: string, iconId: string) => {
+    if (!userEmail) {
+      console.error('No user email available for interaction logging');
+      return;
+    }
+
+    // Add animation effect
+    setClickedIcons(prev => new Set(prev).add(iconId));
+    
+    // Remove animation after 500ms
+    setTimeout(() => {
+      setClickedIcons(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(iconId);
+        return newSet;
+      });
+    }, 500);
+
+    try {
+      const { error } = await supabase
+        .from('pulse_interactions')
+        .insert({
+          email_id: userEmail,
+          event_name: 'training feedback',
+          value_text: valueText
+        });
+      
+      if (error) {
+        console.error('Error logging training feedback interaction:', error);
+      } else {
+        console.log(`Training feedback interaction logged: ${valueText}`);
+      }
+    } catch (err) {
+      console.error('Error logging training feedback interaction:', err);
+    }
+  };
+
   if (!feedback || feedback.length === 0) {
     return (
       <Box sx={{ width: '100%', bgcolor: 'background.paper', borderRadius: 2, p: 3, boxShadow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
@@ -56,10 +95,19 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback }) => {
                     icon={<ThumbUpIcon />}
                     label=""
                     size="small"
+                    onClick={() => handleIconClick('training feedback', 'Like', `like-${item.meso}`)}
+                    title="Like this feedback"
                     sx={{ 
                       bgcolor: '#2196f3', 
                       color: 'white',
                       minWidth: 32,
+                      cursor: 'pointer',
+                      transform: clickedIcons.has(`like-${item.meso}`) ? 'scale(1.2)' : 'scale(1)',
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        bgcolor: '#1976d2',
+                        transform: 'scale(1.05)',
+                      },
                       '& .MuiChip-icon': { color: 'white' }
                     }}
                   />
@@ -67,10 +115,19 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback }) => {
                     icon={<FavoriteIcon />}
                     label=""
                     size="small"
+                    onClick={() => handleIconClick('training feedback', 'Love', `love-${item.meso}`)}
+                    title="Love this feedback"
                     sx={{ 
                       bgcolor: '#f44336', 
                       color: 'white',
                       minWidth: 32,
+                      cursor: 'pointer',
+                      transform: clickedIcons.has(`love-${item.meso}`) ? 'scale(1.2)' : 'scale(1)',
+                      transition: 'all 0.2s ease-in-out',
+                      '&:hover': {
+                        bgcolor: '#d32f2f',
+                        transform: 'scale(1.05)',
+                      },
                       '& .MuiChip-icon': { color: 'white' }
                     }}
                   />

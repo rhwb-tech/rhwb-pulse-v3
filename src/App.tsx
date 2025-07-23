@@ -442,6 +442,33 @@ function App() {
     fetchTrainingFeedback();
   }, [fetchTrainingFeedback]);
 
+  // Log app access to pulse_interactions table
+  useEffect(() => {
+    const logAppAccess = async () => {
+      if (user?.email) {
+        try {
+          const { error } = await supabase
+            .from('pulse_interactions')
+            .insert({
+              email_id: user.email,
+              event_name: 'access',
+              value_text: null
+            });
+          
+          if (error) {
+            console.error('Error logging app access:', error);
+          } else {
+            console.log('App access logged successfully');
+          }
+        } catch (err) {
+          console.error('Error logging app access:', err);
+        }
+      }
+    };
+
+    logAppAccess();
+  }, [user?.email]); // Only run when user email changes (i.e., when user logs in)
+
   const getRoleDisplayName = (role: UserRole) => {
     switch (role) {
       case 'admin': return 'Administrative View';
@@ -838,7 +865,7 @@ function App() {
                 overflow: 'hidden',
                 boxShadow: 1
               }}>
-                <TrainingFeedback feedback={trainingFeedback} />
+                <TrainingFeedback feedback={trainingFeedback} userEmail={user?.email} />
               </Box>
             </Grid>
           </Grid>
