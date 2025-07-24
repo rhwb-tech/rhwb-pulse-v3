@@ -66,6 +66,9 @@ function App() {
   const [hybridToggleMenuAnchor, setHybridToggleMenuAnchor] = useState<null | HTMLElement>(null);
   const hybridToggleMenuOpen = Boolean(hybridToggleMenuAnchor);
 
+  // Debug mode state from URL parameter
+  const [showDebug, setShowDebug] = useState(false);
+
   // Authentication is now handled by JWT context
 
   // Fetch available seasons
@@ -441,6 +444,13 @@ function App() {
   useEffect(() => {
     fetchTrainingFeedback();
   }, [fetchTrainingFeedback]);
+
+  // Check for debug parameter in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const debugParam = urlParams.get('debug');
+    setShowDebug(debugParam === 'true');
+  }, []);
 
   // Log app access to pulse_interactions table
   useEffect(() => {
@@ -871,72 +881,74 @@ function App() {
           </Grid>
         )}
         
-        {/* Debug Section */}
-        <Box sx={{ mt: 4, p: 3, bgcolor: '#f5f5f5', borderRadius: 2, border: '1px solid #ddd' }}>
-          <Typography variant="h6" gutterBottom sx={{ color: '#666', fontWeight: 600 }}>
-            Debug Information
-          </Typography>
-          <Box sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#333' }}>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              <strong>Current Filters:</strong>
+        {/* Debug Section - Only show when debug=true in URL */}
+        {showDebug && (
+          <Box sx={{ mt: 4, p: 3, bgcolor: '#f5f5f5', borderRadius: 2, border: '1px solid #ddd' }}>
+            <Typography variant="h6" gutterBottom sx={{ color: '#666', fontWeight: 600 }}>
+              Debug Information
             </Typography>
-            <Box sx={{ ml: 2, mb: 2 }}>
-              <Typography variant="body2">Season: {season}</Typography>
-              <Typography variant="body2">Email: {selectedRunner || email}</Typography>
-              <Typography variant="body2">User Role: {userRole}</Typography>
-              {selectedCoach && <Typography variant="body2">Coach: {selectedCoach}</Typography>}
-              {userRole === 'hybrid' && <Typography variant="body2">Hybrid Toggle: {hybridToggle}</Typography>}
-            </Box>
-            
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              <strong>SQL Queries:</strong>
-            </Typography>
-            <Box sx={{ ml: 2 }}>
+            <Box sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: '#333' }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Quantitative Scores:</strong>
+                <strong>Current Filters:</strong>
               </Typography>
-              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
-                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-{getQuantSql(season, selectedRunner || email)}
-                </Typography>
+              <Box sx={{ ml: 2, mb: 2 }}>
+                <Typography variant="body2">Season: {season}</Typography>
+                <Typography variant="body2">Email: {selectedRunner || email}</Typography>
+                <Typography variant="body2">User Role: {userRole}</Typography>
+                {selectedCoach && <Typography variant="body2">Coach: {selectedCoach}</Typography>}
+                {userRole === 'hybrid' && <Typography variant="body2">Hybrid Toggle: {hybridToggle}</Typography>}
               </Box>
               
               <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Training Feedback:</strong>
+                <strong>SQL Queries:</strong>
               </Typography>
-              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
-                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+              <Box sx={{ ml: 2 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Quantitative Scores:</strong>
+                </Typography>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+{getQuantSql(season, selectedRunner || email)}
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Training Feedback:</strong>
+                </Typography>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
 SELECT meso, qual FROM rhwb_meso_scores 
 WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
 AND category = 'Personal' AND qual IS NOT NULL
 ORDER BY CAST(REPLACE(meso, 'Meso ', '') AS INTEGER) DESC
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Cumulative Score:</strong>
                 </Typography>
-              </Box>
-              
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Cumulative Score:</strong>
-              </Typography>
-              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
-                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
 SELECT email_id, season, meso, cumulative_score FROM rhwb_meso_scores 
 WHERE email_id = '{selectedRunner || email}' 
 AND season = 'Season {season}' 
 AND category = 'Personal'
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Activity Summary:</strong>
                 </Typography>
-              </Box>
-              
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Activity Summary:</strong>
-              </Typography>
-              <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
-                <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
 SELECT category, percent_completed FROM v_activity_summary 
 WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
-                </Typography>
+                  </Typography>
+                </Box>
               </Box>
             </Box>
           </Box>
-        </Box>
+        )}
       </Box>
     </Container>
   );

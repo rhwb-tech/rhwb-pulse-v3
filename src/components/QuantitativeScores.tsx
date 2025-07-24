@@ -17,9 +17,9 @@ interface QuantitativeScoresProps {
 }
 
 const COLORS = {
-  coach: "#6366F1", // indigo
-  personal: "#EC4899", // pink
-  raceDistance: "#10B981", // emerald
+  coach: "#4285F4", // Google Blue
+  personal: "#EA4335", // Google Red
+  raceDistance: "#34A853", // Google Green
 };
 
 const QuantitativeScores: React.FC<QuantitativeScoresProps> = ({ data }) => {
