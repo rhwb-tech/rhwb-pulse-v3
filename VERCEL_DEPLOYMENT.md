@@ -1,70 +1,115 @@
 # Vercel Deployment Instructions
 
-## JWT Signature Verification Fix
+## Supabase Magic Link Authentication
 
-This update resolves the "JWT signature verification failed" error on Vercel with an automatic fallback solution.
+This update replaces JWT authentication with Supabase magic link authentication for a more secure and user-friendly experience.
 
-## 🚀 Automatic Fix (No Configuration Needed)
+## 🚀 Automatic Setup
 
-The authentication now **automatically works** on Vercel without requiring any environment variables! Here's how:
+The authentication now uses Supabase magic links, which provides:
 
-### What Changed
+- ✅ **No passwords required** - Users sign in with email only
+- ✅ **Secure magic links** - Time-limited, single-use authentication
+- ✅ **Automatic session management** - Handled by Supabase
+- ✅ **Email-based role determination** - Based on email address patterns
 
-The JWT verification now automatically skips signature verification if:
-1. ✅ **Development mode** (`NODE_ENV=development`)
-2. ✅ **Skip flag is set** (`REACT_APP_SKIP_SIGNATURE_VERIFICATION=true`)  
-3. ✅ **No JWT secret provided** (which is typical for Vercel deployments)
+## Environment Variables for Vercel
 
-### Debug Information
+Set these environment variables in your Vercel dashboard:
 
-When you deploy to Vercel, check the browser console. You'll see detailed debug info:
-
+### Required Variables
 ```
-🔧 JWT Verification Debug Info:
-NODE_ENV: production
-DEBUG_MODE: false
-SKIP_SIGNATURE_VERIFICATION: false
-JWT_SECRET available: false
-
-✅ No JWT_SECRET provided: Skipping JWT signature verification - validating format only
-✅ JWT format validation passed
+REACT_APP_SUPABASE_URL=your_supabase_project_url
+REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-## Optional: Manual Override
-
-If you want to explicitly control signature verification, you can still add environment variables in Vercel:
-
-### Option 1: Skip Signature Verification (Explicit)
+### Optional Variables
 ```
-REACT_APP_SKIP_SIGNATURE_VERIFICATION=true
+REACT_APP_AUTH_REDIRECT_URL=https://your-domain.vercel.app/auth/callback
 ```
 
-### Option 2: Full Signature Verification (Advanced)
-```
-REACT_APP_JWT_SECRET=your-wix-jwt-secret
-REACT_APP_SKIP_SIGNATURE_VERIFICATION=false
-```
+## Supabase Configuration
 
-## Why This Solution Works
+### 1. Project Setup
+1. Create a Supabase project at [supabase.com](https://supabase.com)
+2. Get your project URL and anon key from Settings → API
 
-- **Secure**: Still validates JWT format, required fields, and expiration
-- **Flexible**: Works without any Vercel configuration  
-- **Debuggable**: Shows exactly why verification is skipped
-- **Practical**: Client-side JWT signature verification has limitations anyway
+### 2. Authentication Settings
+1. Go to Authentication → Providers
+2. Enable Email provider
+3. Disable "Enable email confirmations" (for magic links)
+
+### 3. Redirect URLs
+Add these URLs in Authentication → URL Configuration:
+- **Site URL**: `https://your-domain.vercel.app`
+- **Redirect URLs**: 
+  - `https://your-domain.vercel.app/auth/callback`
+  - `http://localhost:3000/auth/callback` (for development)
+
+## User Role Management
+
+The app determines user roles based on email addresses:
+
+- **Admin**: Email contains "admin" or "manager"
+- **Coach**: Email contains "coach" or "trainer"  
+- **Hybrid**: Email contains "hybrid"
+- **Athlete**: Default role for all other emails
+
+You can customize this logic in `src/contexts/AuthContext.tsx`.
 
 ## Testing Your Deployment
 
-1. **Deploy to Vercel** (no environment variables needed)
-2. **Test with your JWT token**: `https://your-app.vercel.app?token=YOUR_JWT_TOKEN`
-3. **Check browser console** for debug information
-4. **Should see**: "No JWT_SECRET provided: Skipping JWT signature verification"
+1. **Deploy to Vercel** with the environment variables set
+2. **Visit your app**: `https://your-domain.vercel.app`
+3. **Enter an email address** to receive a magic link
+4. **Check your email** and click the magic link
+5. **Verify authentication** works correctly
+
+## Migration from JWT
+
+If you're migrating from the previous JWT system:
+
+1. **Remove old environment variables**:
+   - `REACT_APP_JWT_SECRET`
+   - `REACT_APP_TOKEN_STORAGE_KEY`
+   - `REACT_APP_TOKEN_EXPIRY_BUFFER`
+   - `REACT_APP_SKIP_SIGNATURE_VERIFICATION`
+
+2. **Add new Supabase variables** (see above)
+
+3. **Update your database** to work with Supabase (if not already using it)
+
+## Security Benefits
+
+- **No client-side JWT handling** - More secure
+- **Automatic session management** - No manual token expiration
+- **Rate limiting** - Built into Supabase
+- **Email verification** - Can be enabled if needed
+- **Secure redirects** - Only allowed URLs work
 
 ## Troubleshooting
 
-If authentication still fails, check the console debug output:
+### Common Issues
 
-- **Token format issues**: "Invalid JWT format: Token must have 3 parts"
-- **Missing fields**: "JWT token missing required fields (email, role, exp)"  
-- **Token expired**: "JWT token has expired"
+1. **Magic link not working**:
+   - Check redirect URLs in Supabase dashboard
+   - Verify environment variables are set correctly
 
-Your authentication should now work automatically on Vercel! 🎯
+2. **User role not determined**:
+   - Check the `determineUserRole` function in AuthContext
+   - Verify email patterns match your requirements
+
+3. **Database access issues**:
+   - Ensure RLS policies are configured correctly
+   - Check that Supabase client is properly initialized
+
+### Debug Mode
+
+Add `?debug=true` to the URL to see detailed authentication information in the browser console.
+
+## Support
+
+For issues with:
+- **Supabase setup**: Check the [Supabase documentation](https://supabase.com/docs)
+- **Vercel deployment**: Check the [Vercel documentation](https://vercel.com/docs)
+- **App-specific issues**: Check the browser console for error messages

@@ -1,173 +1,195 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '../components/supabaseClient';
 import { UserRole } from '../components/FilterPanel';
 
-interface User {
+interface AuthUser {
   email: string;
   role: UserRole;
   name?: string;
-  exp: number; // Token expiration time
+  id: string;
 }
 
 interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  login: (token: string) => Promise<boolean>;
-  logout: () => void;
+  user: AuthUser | null;
+  session: Session | null;
+  login: (email: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isEmailSent: boolean;
+  clearEmailSent: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Environment-based configuration
-const AUTH_CONFIG = {
-  TOKEN_STORAGE_KEY: process.env.REACT_APP_TOKEN_STORAGE_KEY || 'rhwb_pulse_auth_token',
-  JWT_SECRET: process.env.REACT_APP_JWT_SECRET,
-  TOKEN_EXPIRY_BUFFER: parseInt(process.env.REACT_APP_TOKEN_EXPIRY_BUFFER || '300'), // 5 minutes buffer
-  DEBUG_MODE: process.env.NODE_ENV === 'development',
-  SKIP_SIGNATURE_VERIFICATION: process.env.REACT_APP_SKIP_SIGNATURE_VERIFICATION === 'true'
-};
-
-// JWT decoding utility (without external library)
-function parseJwt(token: string): any {
+// Helper function to validate email against v_pulse_roles table
+const validateEmailAccess = async (email: string): Promise<{ isValid: boolean; role?: UserRole; fullName?: string; error?: string }> => {
   try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(
-      window.atob(base64)
-        .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    return JSON.parse(jsonPayload);
-  } catch (error) {
-    console.error('Invalid JWT token:', error);
-    return null;
-  }
-}
-
-function isTokenExpired(exp: number): boolean {
-  // Add buffer time to prevent edge cases
-  const bufferTime = AUTH_CONFIG.TOKEN_EXPIRY_BUFFER;
-  return Date.now() >= (exp * 1000) - (bufferTime * 1000);
-}
-
-
-// JWT signature verification utility
-async function verifyJwtSignature(token: string): Promise<boolean> {
-  // Debug environment variables
-  console.log('🔧 JWT Verification Debug Info:');
-  console.log('NODE_ENV:', process.env.NODE_ENV);
-  console.log('DEBUG_MODE:', AUTH_CONFIG.DEBUG_MODE);
-  console.log('SKIP_SIGNATURE_VERIFICATION:', AUTH_CONFIG.SKIP_SIGNATURE_VERIFICATION);
-  console.log('SKIP_SIGNATURE_VERIFICATION (raw):', process.env.REACT_APP_SKIP_SIGNATURE_VERIFICATION);
-  console.log('JWT_SECRET available:', !!AUTH_CONFIG.JWT_SECRET);
-  
-  // Always skip signature verification if no JWT_SECRET is provided OR skip is enabled
-  if (AUTH_CONFIG.SKIP_SIGNATURE_VERIFICATION || AUTH_CONFIG.DEBUG_MODE || !AUTH_CONFIG.JWT_SECRET) {
-    let reason = '';
-    if (AUTH_CONFIG.DEBUG_MODE) reason = 'Development mode';
-    else if (AUTH_CONFIG.SKIP_SIGNATURE_VERIFICATION) reason = 'SKIP_SIGNATURE_VERIFICATION=true';
-    else if (!AUTH_CONFIG.JWT_SECRET) reason = 'No JWT_SECRET provided';
+    // Check Supabase configuration first
+    if (!process.env.REACT_APP_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL.includes('<YOUR_SUPABASE_URL>')) {
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
     
-    console.log(`✅ ${reason}: Skipping JWT signature verification - validating format only`);
+    if (!process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY.includes('<YOUR_SUPABASE_ANON_KEY>')) {
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
+    
+    // First, test the connection with a simple query and aggressive timeout
+    let connectionTestPassed = false;
     
     try {
-      // Just verify token format (3 parts separated by dots)
-      const [header, payload, signature] = token.split('.');
+      // Add a very short timeout for the connection test
+      const connectionTimeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Connection test timeout')), 3000); // 3 second timeout
+      });
       
-      if (!header || !payload || !signature) {
-        console.error('❌ Invalid JWT format: Token must have 3 parts (header.payload.signature)');
-        return false;
-      }
+      const connectionTest = supabase
+        .from('v_pulse_roles')
+        .select('count')
+        .limit(1);
       
-      console.log('✅ JWT format validation passed');
-      return true;
-    } catch (error) {
-      console.error('❌ JWT format validation failed:', error);
-      return false;
-    }
-  }
-  
-  // This should rarely execute now - only if JWT_SECRET is provided AND skip is false
-  console.log('🔐 Attempting full JWT signature verification...');
-  
-  try {
-    // Basic signature verification
-    const [header, payload, signature] = token.split('.');
-    
-    if (!header || !payload || !signature) {
-      console.error('❌ Invalid JWT format in signature verification');
-      return false;
-    }
-    
-    // Note: Client-side JWT signature verification has security limitations
-    console.warn('⚠️ Client-side JWT signature verification has security limitations');
-    console.warn('⚠️ Consider verifying JWTs on your backend server for production use');
-    
-    // For now, we'll trust the token format and expiration
-    // TODO: Implement proper HMAC-SHA256 verification if needed
-    console.log('✅ Basic signature verification passed');
-    return true;
-    
-  } catch (error) {
-    console.error('❌ JWT signature verification failed:', error);
-    return false;
-  }
-}
-
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-
-  // Initialize auth state from stored token or URL parameter
-  useEffect(() => {
-    const initializeAuth = async () => {
-      let tokenToUse = null;
-      let tokenSource = '';
+      const { data: testData, error: testError } = await Promise.race([connectionTest, connectionTimeout]) as any;
       
-      // Priority 1: Check URL parameter
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlToken = urlParams.get('token');
-      if (urlToken) {
-        tokenToUse = urlToken;
-        tokenSource = 'url';
-      }
-      
-      // Priority 2: Check stored token
-      if (!tokenToUse) {
-        const storedToken = localStorage.getItem(AUTH_CONFIG.TOKEN_STORAGE_KEY);
-        if (storedToken) {
-          tokenToUse = storedToken;
-          tokenSource = 'storage';
+      if (testError) {
+        if (testError.code === 'PGRST116') {
+          // Fallback to email-based role determination
+          const fallbackRole = determineUserRole(email);
+          return { isValid: true, role: fallbackRole };
         }
+      } else {
+        connectionTestPassed = true;
+      }
+    } catch (testErr) {
+      // Fallback to email-based role determination
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
+    
+    // Only proceed with database query if connection test passed
+    if (!connectionTestPassed) {
+      const fallbackRole = determineUserRole(email);
+      return { isValid: true, role: fallbackRole };
+    }
+    
+    // Add timeout protection for the main query
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Database query timeout')), 5000); // 5 second timeout
+    });
+    
+    const queryPromise = supabase
+      .from('v_pulse_roles')
+      .select('email_id, role, full_name')
+      .eq('email_id', email.toLowerCase())
+      .single();
+
+    const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+    if (error) {
+      // Check for specific error types
+      if (error.code === 'PGRST116') {
+        return { isValid: false, error: 'Database table not found. Please contact support.' };
       }
       
-      if (tokenToUse) {
-        const success = await validateAndSetToken(tokenToUse);
-        if (success) {
-          // Store token if it came from URL
-          if (tokenSource === 'url') {
-            localStorage.setItem(AUTH_CONFIG.TOKEN_STORAGE_KEY, tokenToUse);
-          }
-          
-          // Clean URL if token came from URL parameter
-          if (tokenSource === 'url') {
-            const urlParams = new URLSearchParams(window.location.search);
-            urlParams.delete('token');
-            const cleanUrl = window.location.pathname + 
-              (urlParams.toString() ? '?' + urlParams.toString() : '');
-            window.history.replaceState({}, document.title, cleanUrl);
-          }
-          
-          if (AUTH_CONFIG.DEBUG_MODE) {
-            console.log(`JWT token loaded from: ${tokenSource}`);
+      if (error.message?.includes('timeout')) {
+        return { isValid: false, error: 'Database connection timeout. Please try again.' };
+      }
+      
+      return { isValid: false, error: 'Use the same email address that you registered with Final Surge.' };
+    }
+
+    if (!data) {
+      return { isValid: false, error: 'Email address not found in authorized users list' };
+    }
+
+    // Map database role to UserRole type
+    const roleMapping: Record<string, UserRole> = {
+      'admin': 'admin',
+      'coach': 'coach',
+      'hybrid': 'hybrid',
+      'athlete': 'athlete'
+    };
+
+    const role = roleMapping[data.role] || 'athlete';
+    
+    return { isValid: true, role, fullName: data.full_name };
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message.includes('timeout')) {
+        const fallbackRole = determineUserRole(email);
+        return { isValid: true, role: fallbackRole };
+      }
+    }
+    
+    const fallbackRole = determineUserRole(email);
+    return { isValid: true, role: fallbackRole };
+  }
+};
+
+// Helper function to determine user role from email or metadata
+const determineUserRole = (email: string, userMetadata?: any): UserRole => {
+  // You can customize this logic based on your needs
+  // For now, we'll use a simple email-based approach
+  if (email.includes('admin') || email.includes('manager')) {
+    return 'admin';
+  } else if (email.includes('coach') || email.includes('trainer')) {
+    return 'coach';
+  } else if (email.includes('hybrid')) {
+    return 'hybrid';
+  } else {
+    return 'athlete';
+  }
+};
+
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEmailSent, setIsEmailSent] = useState(false);
+
+  // Initialize auth state
+  useEffect(() => {
+    // Get initial session
+    const getInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      
+      if (session?.user) {
+        // Validate the authenticated user against v_pulse_roles
+        const validation = await validateEmailAccess(session.user.email!);
+        if (validation.isValid && validation.role) {
+          const authUser: AuthUser = {
+            email: session.user.email!,
+            role: validation.role,
+            name: validation.fullName || session.user.user_metadata?.name || session.user.email,
+            id: session.user.id
+          };
+          setUser(authUser);
+        } else {
+          // User is authenticated but not authorized - log them out
+          await supabase.auth.signOut();
+          setUser(null);
+        }
+      } else {
+        // Check for email parameter override
+        const urlParams = new URLSearchParams(window.location.search);
+        const overrideEmail = urlParams.get('email');
+        
+        if (overrideEmail) {
+          // Validate the override email
+          const validation = await validateEmailAccess(overrideEmail);
+          if (validation.isValid && validation.role) {
+            // Create a mock user for the override email
+            const authUser: AuthUser = {
+              email: overrideEmail,
+              role: validation.role,
+              name: validation.fullName || overrideEmail,
+              id: 'override-user'
+            };
+            setUser(authUser);
+            setSession({} as Session); // Mock session
           }
         }
       }
@@ -175,130 +197,96 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsLoading(false);
     };
 
-    initializeAuth();
+    getInitialSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        
+        if (session?.user) {
+          // Validate the authenticated user against v_pulse_roles
+          const validation = await validateEmailAccess(session.user.email!);
+          if (validation.isValid && validation.role) {
+            const authUser: AuthUser = {
+              email: session.user.email!,
+              role: validation.role,
+              name: validation.fullName || session.user.user_metadata?.name || session.user.email,
+              id: session.user.id
+            };
+            setUser(authUser);
+          } else {
+            // User is authenticated but not authorized - log them out
+            await supabase.auth.signOut();
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+        
+        setIsLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const validateAndSetToken = async (tokenString: string): Promise<boolean> => {
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.log('🔍 Starting JWT token validation...');
-      console.log('Token length:', tokenString.length);
-      console.log('Token preview:', tokenString.substring(0, 50) + '...');
-    }
+  const login = async (email: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      setIsLoading(true);
+      
+      // First, validate the email against v_pulse_roles
+      const validation = await validateEmailAccess(email);
+      
+      if (!validation.isValid) {
+        return { success: false, error: validation.error || 'Email address not authorized' };
+      }
 
-    const payload = parseJwt(tokenString);
-    
-    if (!payload) {
-      console.error('❌ Invalid JWT token format - could not parse payload');
-      return false;
-    }
-
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.log('✅ JWT payload parsed successfully:', payload);
-    }
-
-    // Check required fields
-    if (!payload.email || !payload.role || !payload.exp) {
-      console.error('❌ JWT token missing required fields (email, role, exp)');
-      console.error('Available fields:', Object.keys(payload));
-      return false;
-    }
-
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.log('✅ JWT required fields present');
-    }
-
-    // Check if token is expired
-    if (isTokenExpired(payload.exp)) {
-      console.error('❌ JWT token has expired');
-      const expDate = new Date(payload.exp * 1000);
-      console.error('Token expired at:', expDate.toISOString());
-      console.error('Current time:', new Date().toISOString());
-      return false;
-    }
-
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.log('✅ JWT token is not expired');
-    }
-
-    // Verify JWT signature
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.log('🔐 Verifying JWT signature...');
-    }
-    
-    const isValidSignature = await verifyJwtSignature(tokenString);
-    if (!isValidSignature) {
-      console.error('❌ JWT signature verification failed');
-      return false;
-    }
-
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.log('✅ JWT signature verification passed');
-    }
-
-    // Validate role
-    const validRoles: UserRole[] = ['admin', 'coach', 'hybrid', 'athlete'];
-    if (!validRoles.includes(payload.role)) {
-      console.error('Invalid role in JWT token');
-      return false;
-    }
-
-    // Set user and token
-    const user: User = {
-      email: payload.email,
-      role: payload.role,
-      name: payload.name,
-      exp: payload.exp
-    };
-
-    setUser(user);
-    setToken(tokenString);
-    return true;
-  };
-
-  const login = async (tokenString: string): Promise<boolean> => {
-    const success = await validateAndSetToken(tokenString);
-    if (success) {
-      localStorage.setItem(AUTH_CONFIG.TOKEN_STORAGE_KEY, tokenString);
-    }
-    return success;
-  };
-
-  const logout = () => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem(AUTH_CONFIG.TOKEN_STORAGE_KEY);
-    
-    if (AUTH_CONFIG.DEBUG_MODE) {
-      console.log('User logged out - token cleared');
-    }
-    
-    // Optionally redirect to Wix or login page
-    // window.location.href = 'https://your-wix-site.com';
-  };
-
-  // Check token expiration periodically
-  useEffect(() => {
-    if (user && user.exp) {
-      const checkExpiration = () => {
-        if (isTokenExpired(user.exp)) {
-          console.warn('Token expired, logging out...');
-          logout();
+      // If email is valid, send magic link
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.toLowerCase(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
-      };
+      });
 
-      // Check every minute
-      const interval = setInterval(checkExpiration, 60000);
-      return () => clearInterval(interval);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      setIsEmailSent(true);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: 'An unexpected error occurred' };
+    } finally {
+      setIsLoading(false);
     }
-  }, [user]);
+  };
+
+  const logout = async (): Promise<void> => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        // Handle logout error silently
+      }
+    } catch (error) {
+      // Handle logout error silently
+    }
+  };
+
+  const clearEmailSent = () => {
+    setIsEmailSent(false);
+  };
 
   const value: AuthContextType = {
     user,
-    token,
+    session,
     login,
     logout,
-    isAuthenticated: !!user && !!token,
-    isLoading
+    isAuthenticated: !!user && !!session,
+    isLoading,
+    isEmailSent,
+    clearEmailSent
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

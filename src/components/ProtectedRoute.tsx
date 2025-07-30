@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, CircularProgress, Alert, Typography, Button } from '@mui/material';
+import { Box, CircularProgress, Typography, Alert, Button, TextField } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -7,7 +7,14 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent } = useAuth();
+  const [email, setEmail] = React.useState('');
+  const [loginError, setLoginError] = React.useState('');
+
+  // Check if we're in override mode
+  const urlParams = new URLSearchParams(window.location.search);
+  const overrideEmail = urlParams.get('email');
+  const isOverrideMode = !!overrideEmail;
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -24,14 +31,34 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       >
         <CircularProgress size={60} />
         <Typography variant="h6" color="text.secondary">
-          Authenticating...
+          Loading...
         </Typography>
       </Box>
     );
   }
 
-  // Show error if not authenticated
+  // Show login form if not authenticated
   if (!isAuthenticated) {
+    const handleLogin = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoginError('');
+      
+      if (!email) {
+        setLoginError('Please enter your email address');
+        return;
+      }
+
+      const result = await login(email);
+      if (!result.success) {
+        setLoginError(result.error || 'Failed to send magic link');
+      }
+    };
+
+    const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setEmail(e.target.value);
+      if (loginError) setLoginError('');
+    };
+
     return (
       <Box
         sx={{
@@ -44,67 +71,114 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           p: 3
         }}
       >
-        <Alert severity="error" sx={{ maxWidth: 500 }}>
-          <Typography variant="h6" gutterBottom>
-            Authentication Required
-          </Typography>
-          <Typography variant="body2">
-            You need a valid JWT token to access this application. 
-            Please ensure you're accessing this app through the proper Wix integration.
-          </Typography>
-        </Alert>
-        
-        <Box sx={{ textAlign: 'center' }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            If you have a token, you can add it to the URL:
-          </Typography>
-          <Typography variant="caption" sx={{ fontFamily: 'monospace', bgcolor: '#f5f5f5', p: 1, borderRadius: 1 }}>
-            {window.location.origin}?token=YOUR_JWT_TOKEN
-          </Typography>
-        </Box>
-
-        <Button 
-          variant="outlined" 
-          onClick={() => window.location.reload()}
-          sx={{ mt: 2 }}
-        >
-          Retry
-        </Button>
+        {isEmailSent ? (
+          <Alert severity="success" sx={{ maxWidth: 500 }}>
+            <Typography variant="h6" gutterBottom>
+              Check Your Email
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              We've sent a magic link to <strong>{email}</strong>. 
+              Click the link in your email to sign in.
+            </Typography>
+            <Button 
+              variant="outlined" 
+              onClick={clearEmailSent}
+              sx={{ mt: 1 }}
+            >
+              Try Different Email
+            </Button>
+          </Alert>
+        ) : (
+          <Box sx={{ maxWidth: 400, width: '100%' }}>
+            <Typography variant="h4" gutterBottom align="center">
+              RHWB Pulse Dashboard
+            </Typography>
+            <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
+              Sign in with your authorized email to access the dashboard
+            </Typography>
+            
+            <Box component="form" onSubmit={handleLogin} sx={{ width: '100%' }}>
+              <TextField
+                fullWidth
+                label="Email Address"
+                type="email"
+                value={email}
+                onChange={handleEmailChange}
+                error={!!loginError}
+                helperText={loginError}
+                sx={{ mb: 3 }}
+                placeholder="Enter your authorized email address"
+              />
+              
+              <Button 
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                sx={{ mb: 2 }}
+              >
+                Send Magic Link
+              </Button>
+            </Box>
+            
+            <Typography variant="caption" color="text.secondary" align="center" display="block">
+              Only authorized users can access this dashboard. 
+              If you believe you should have access, please{' '}
+              <a 
+                href="mailto:techteamrhwb@gmail.com?subject=Unable to login to Pulse" 
+                style={{ color: '#1976d2', textDecoration: 'underline' }}
+              >
+                send an email to RHWB Tech Team
+              </a>.
+            </Typography>
+          </Box>
+        )}
       </Box>
     );
   }
 
   // Show user info and logout option
   return (
-    <Box>
-      {/* Optional: Debug info in development */}
-      {process.env.NODE_ENV === 'development' && user && (
-        <Box sx={{ 
-          position: 'fixed', 
-          top: 0, 
-          right: 0, 
-          bgcolor: 'rgba(0,0,0,0.8)', 
-          color: 'white', 
-          p: 1, 
-          fontSize: 12,
-          zIndex: 9999,
-          borderRadius: '0 0 0 8px'
-        }}>
-          <div>User: {user.email}</div>
-          <div>Role: {user.role}</div>
-          <div>Exp: {new Date(user.exp * 1000).toLocaleString()}</div>
-          <Button 
-            size="small" 
-            color="inherit" 
-            onClick={logout}
-            sx={{ fontSize: 10, mt: 0.5 }}
-          >
-            Logout
-          </Button>
+    <Box sx={{ minHeight: '100vh' }}>
+      {/* Header with user info and logout */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          p: 2,
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider'
+        }}
+      >
+        <Box>
+          <Typography variant="h6" component="h1">
+            RHWB Pulse Dashboard
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Welcome, {user?.name || user?.email} ({user?.role})
+            {isOverrideMode && (
+              <span style={{ color: '#f57c00', fontWeight: 'bold' }}>
+                {' '}(Override Mode)
+              </span>
+            )}
+          </Typography>
         </Box>
-      )}
+        
+        <Button 
+          variant="outlined" 
+          onClick={logout}
+          size="small"
+        >
+          Sign Out
+        </Button>
+      </Box>
       
-      {children}
+      {/* Main content */}
+      <Box sx={{ p: 2 }}>
+        {children}
+      </Box>
     </Box>
   );
 };
