@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, CircularProgress, Typography, Alert, Button, TextField } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
+import { getAppConfig } from '../config/appConfig';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -10,6 +11,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent } = useAuth();
   const [email, setEmail] = React.useState('');
   const [loginError, setLoginError] = React.useState('');
+  const appConfig = getAppConfig();
 
   // Check if we're in override mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -91,7 +93,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         ) : (
           <Box sx={{ maxWidth: 400, width: '100%' }}>
             <Typography variant="h4" gutterBottom align="center">
-              RHWB Pulse Dashboard
+              {appConfig.appName}
             </Typography>
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
               Sign in with your authorized email to access the dashboard
@@ -125,7 +127,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
               Only authorized users can access this dashboard. 
               If you believe you should have access, please{' '}
               <a 
-                href="mailto:techteamrhwb@gmail.com?subject=Unable to login to Pulse" 
+                href={`mailto:${appConfig.supportEmail}?subject=${appConfig.supportSubject}`}
                 style={{ color: '#1976d2', textDecoration: 'underline' }}
               >
                 send an email to RHWB Tech Team
@@ -154,7 +156,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       >
         <Box>
           <Typography variant="h6" component="h1">
-            RHWB Pulse Dashboard
+            {appConfig.appName}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Welcome, {user?.name || user?.email} ({user?.role})

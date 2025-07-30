@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../components/supabaseClient';
 import { UserRole } from '../components/FilterPanel';
+import { getAppConfig } from '../config/appConfig';
 
 interface AuthUser {
   email: string;

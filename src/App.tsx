@@ -7,6 +7,7 @@ import CumulativeScore from './components/CumulativeScore';
 import ActivitySummary from './components/ActivitySummary';
 import TrainingFeedback from './components/TrainingFeedback';
 import { useAuth } from './contexts/AuthContext';
+import { getAppConfig } from './config/appConfig';
 
 interface Option {
   value: string;
@@ -488,6 +489,9 @@ function App() {
     }
   };
 
+  const appConfig = getAppConfig();
+  const dashboardTitle = appConfig.dashboardTitle || 'Athlete Performance Dashboard';
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       {/* AppBar with Hamburger Menu */}
@@ -782,7 +786,7 @@ function App() {
             display: { xs: 'none', sm: 'block' }, // Hide on mobile, show on sm and up
           }}
         >
-          Athlete Performance Dashboard
+          {dashboardTitle}
         </Typography>
         <Box sx={{ width: '100%', mb: 3, display: { xs: 'none', sm: 'block' } }}>
           <Box sx={{ borderBottom: '2px solid #e3f2fd', width: '80%', mx: 'auto' }} />
