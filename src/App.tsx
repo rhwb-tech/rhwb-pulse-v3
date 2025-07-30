@@ -503,7 +503,7 @@ function App() {
         mb: 2, 
         display: 'flex', 
         justifyContent: 'flex-start',
-        overflowX: 'auto',
+        overflowX: { xs: 'visible', sm: 'auto' },
         pb: 1,
         '&::-webkit-scrollbar': {
           height: 6,
@@ -517,74 +517,27 @@ function App() {
           borderRadius: 3,
         },
       }}>
-        <Stack direction="row" spacing={2} sx={{ minWidth: 'fit-content' }}>
-          <Chip
-            label={`Season ${season}`}
-            onClick={handleSeasonMenuOpen}
-            sx={{
-              bgcolor: '#e3f2fd',
-              color: '#1976d2',
-              fontWeight: 600,
-              fontSize: { xs: 14, sm: 16, md: 18 },
-              borderRadius: 999,
-              px: 2,
-              py: 1,
+        {/* Desktop Layout - Horizontal */}
+        <Stack 
+          direction={{ xs: 'column', sm: 'row' }} 
+          spacing={2} 
+          sx={{ 
+            minWidth: 'fit-content',
+            width: '100%'
+          }}
+        >
+          {/* First Row - Season and Hybrid Toggle */}
+          <Stack 
+            direction="row" 
+            spacing={2} 
+            sx={{ 
               minWidth: 'fit-content',
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              '&:hover': {
-                bgcolor: '#bbdefb',
-              },
-            }}
-          />
-          <Menu
-            anchorEl={seasonMenuAnchor}
-            open={seasonMenuOpen}
-            onClose={handleSeasonMenuClose}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'left',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'left',
-            }}
-            PaperProps={{
-              sx: {
-                mt: 1,
-                minWidth: 120,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                borderRadius: 2,
-                border: '1px solid #e0e0e0',
-              }
+              flexWrap: 'wrap'
             }}
           >
-            {seasonOptions.map((seasonOption) => (
-              <MenuItem
-                key={seasonOption.value}
-                onClick={() => handleSeasonChange(seasonOption.value)}
-                selected={season === seasonOption.value}
-                sx={{
-                  minHeight: 40,
-                  '&.Mui-selected': {
-                    bgcolor: '#e3f2fd',
-                    color: '#1976d2',
-                    fontWeight: 600,
-                  },
-                  '&:hover': {
-                    bgcolor: '#f5f5f5',
-                  },
-                }}
-              >
-                <ListItemText primary={seasonOption.label} />
-              </MenuItem>
-            ))}
-          </Menu>
-          {/* Show hybrid toggle chip for hybrid users */}
-          {userRole === 'hybrid' && (
             <Chip
-              label={hybridToggle === 'myScore' ? 'My Score' : 'My Cohorts'}
-              onClick={handleHybridToggleMenuOpen}
+              label={`Season ${season}`}
+              onClick={handleSeasonMenuOpen}
               sx={{
                 bgcolor: '#e3f2fd',
                 color: '#1976d2',
@@ -601,54 +554,139 @@ function App() {
                 },
               }}
             />
-          )}
-          <Menu
-            anchorEl={hybridToggleMenuAnchor}
-            open={hybridToggleMenuOpen}
-            onClose={handleHybridToggleMenuClose}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'left',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'left',
-            }}
-            PaperProps={{
-              sx: {
-                mt: 1,
-                minWidth: 150,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                borderRadius: 2,
-                border: '1px solid #e0e0e0',
-              }
-            }}
-          >
-            {[
-              { value: 'myScore', label: 'My Score' },
-              { value: 'myCohorts', label: 'My Cohorts' }
-            ].map((toggleOption) => (
-              <MenuItem
-                key={toggleOption.value}
-                onClick={() => handleHybridToggleChangeFromChip(toggleOption.value as 'myScore' | 'myCohorts')}
-                selected={hybridToggle === toggleOption.value}
+            <Menu
+              anchorEl={seasonMenuAnchor}
+              open={seasonMenuOpen}
+              onClose={handleSeasonMenuClose}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'left',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'left',
+              }}
+              PaperProps={{
+                sx: {
+                  mt: 1,
+                  minWidth: 120,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  borderRadius: 2,
+                  border: '1px solid #e0e0e0',
+                }
+              }}
+            >
+              {seasonOptions.map((seasonOption) => (
+                <MenuItem
+                  key={seasonOption.value}
+                  onClick={() => handleSeasonChange(seasonOption.value)}
+                  selected={season === seasonOption.value}
+                  sx={{
+                    minHeight: 40,
+                    '&.Mui-selected': {
+                      bgcolor: '#e3f2fd',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                    },
+                    '&:hover': {
+                      bgcolor: '#f5f5f5',
+                    },
+                  }}
+                >
+                  <ListItemText primary={seasonOption.label} />
+                </MenuItem>
+              ))}
+            </Menu>
+            
+            {/* Show hybrid toggle chip for hybrid users */}
+            {userRole === 'hybrid' && (
+              <Chip
+                label={hybridToggle === 'myScore' ? 'My Score' : 'My Cohorts'}
+                onClick={handleHybridToggleMenuOpen}
                 sx={{
-                  minHeight: 40,
-                  '&.Mui-selected': {
-                    bgcolor: '#e3f2fd',
-                    color: '#1976d2',
-                    fontWeight: 600,
-                  },
+                  bgcolor: '#e3f2fd',
+                  color: '#1976d2',
+                  fontWeight: 600,
+                  fontSize: { xs: 14, sm: 16, md: 18 },
+                  borderRadius: 999,
+                  px: 2,
+                  py: 1,
+                  minWidth: 'fit-content',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
                   '&:hover': {
-                    bgcolor: '#f5f5f5',
+                    bgcolor: '#bbdefb',
                   },
                 }}
-              >
-                <ListItemText primary={toggleOption.label} />
-              </MenuItem>
-            ))}
-          </Menu>
-          {/* Show runner chip if selected */}
+              />
+            )}
+            <Menu
+              anchorEl={hybridToggleMenuAnchor}
+              open={hybridToggleMenuOpen}
+              onClose={handleHybridToggleMenuClose}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'left',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'left',
+              }}
+              PaperProps={{
+                sx: {
+                  mt: 1,
+                  minWidth: 150,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  borderRadius: 2,
+                  border: '1px solid #e0e0e0',
+                }
+              }}
+            >
+              {[
+                { value: 'myScore', label: 'My Score' },
+                { value: 'myCohorts', label: 'My Cohorts' }
+              ].map((toggleOption) => (
+                <MenuItem
+                  key={toggleOption.value}
+                  onClick={() => handleHybridToggleChangeFromChip(toggleOption.value as 'myScore' | 'myCohorts')}
+                  selected={hybridToggle === toggleOption.value}
+                  sx={{
+                    minHeight: 40,
+                    '&.Mui-selected': {
+                      bgcolor: '#e3f2fd',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                    },
+                    '&:hover': {
+                      bgcolor: '#f5f5f5',
+                    },
+                  }}
+                >
+                  <ListItemText primary={toggleOption.label} />
+                </MenuItem>
+              ))}
+            </Menu>
+            
+            {/* Show coach chip for admin if selected */}
+            {userRole === 'admin' && selectedCoach && (
+              <Chip
+                label={selectedCoach}
+                sx={{
+                  bgcolor: '#e3f2fd',
+                  color: '#1976d2',
+                  fontWeight: 600,
+                  fontSize: { xs: 14, sm: 16, md: 18 },
+                  borderRadius: 999,
+                  px: 2,
+                  py: 1,
+                  minWidth: 'fit-content',
+                  whiteSpace: 'nowrap',
+                }}
+              />
+            )}
+          </Stack>
+          
+          {/* Second Row - Runner Chip (Mobile) or Same Row (Desktop) */}
           {selectedRunner && (
             <Chip
               label={runnerList.find(r => r.value === selectedRunner)?.label || selectedRunner}
@@ -714,23 +752,6 @@ function App() {
               </MenuItem>
             ))}
           </Menu>
-          {/* Show coach chip for admin if selected */}
-          {userRole === 'admin' && selectedCoach && (
-            <Chip
-              label={selectedCoach}
-              sx={{
-                bgcolor: '#e3f2fd',
-                color: '#1976d2',
-                fontWeight: 600,
-                fontSize: { xs: 14, sm: 16, md: 18 },
-                borderRadius: 999,
-                px: 2,
-                py: 1,
-                minWidth: 'fit-content',
-                whiteSpace: 'nowrap',
-              }}
-            />
-          )}
         </Stack>
       </Box>
 
@@ -758,11 +779,12 @@ function App() {
             mt: 1,
             letterSpacing: 0.5,
             fontSize: { xs: '2rem', sm: '2.5rem', md: '2.75rem' },
+            display: { xs: 'none', sm: 'block' }, // Hide on mobile, show on sm and up
           }}
         >
           Athlete Performance Dashboard
         </Typography>
-        <Box sx={{ width: '100%', mb: 3 }}>
+        <Box sx={{ width: '100%', mb: 3, display: { xs: 'none', sm: 'block' } }}>
           <Box sx={{ borderBottom: '2px solid #e3f2fd', width: '80%', mx: 'auto' }} />
         </Box>
         {/* Widgets Grid */}
