@@ -511,14 +511,14 @@ function App() {
   const getRoleDisplayName = (role: UserRole) => {
     switch (role) {
       case 'admin': return 'Administrative View';
-      case 'coach': return 'Coach Dashboard';
-      case 'hybrid': return 'Athlete Performance Dashboard';
-      default: return 'Athlete Dashboard';
+      case 'coach': return 'Coach View';
+      case 'hybrid': return 'Athlete Performance';
+      default: return 'Athlete View';
     }
   };
 
   const appConfig = getAppConfig();
-  const dashboardTitle = appConfig.dashboardTitle || 'Athlete Performance Dashboard';
+  const dashboardTitle = appConfig.dashboardTitle || 'Athlete Performance';
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>

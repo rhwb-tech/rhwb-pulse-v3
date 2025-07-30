@@ -11,17 +11,17 @@ export interface AppConfig {
 // Configuration for different apps
 const APP_CONFIGS: Record<string, AppConfig> = {
   'pulse': {
-    appName: 'RHWB Pulse Dashboard',
+    appName: 'RHWB Pulse',
     appDomain: 'rhwb-pulse.vercel.app',
-    dashboardTitle: 'Athlete Performance Dashboard',
-    emailSubject: 'Sign in to RHWB Pulse Dashboard',
+    dashboardTitle: 'Athlete Performance',
+    emailSubject: 'Sign in to RHWB Pulse',
     supportEmail: 'techteamrhwb@gmail.com',
     supportSubject: 'Unable to login to Pulse'
   },
   'coach': {
     appName: 'RHWB Coach Portal',
     appDomain: 'rhwb-coach.vercel.app',
-    dashboardTitle: 'Coach Management Dashboard',
+    dashboardTitle: 'Coach Management',
     emailSubject: 'Sign in to RHWB Coach Portal',
     supportEmail: 'techteamrhwb@gmail.com',
     supportSubject: 'Unable to login to Coach Portal'
@@ -29,7 +29,7 @@ const APP_CONFIGS: Record<string, AppConfig> = {
   'admin': {
     appName: 'RHWB Admin Portal',
     appDomain: 'rhwb-admin.vercel.app',
-    dashboardTitle: 'Administrative Dashboard',
+    dashboardTitle: 'Administrative',
     emailSubject: 'Sign in to RHWB Admin Portal',
     supportEmail: 'techteamrhwb@gmail.com',
     supportSubject: 'Unable to login to Admin Portal'
