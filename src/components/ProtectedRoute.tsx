@@ -91,19 +91,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             </Button>
           </Alert>
         ) : (
-          <Box sx={{ maxWidth: 400, width: '100%' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+          <Box sx={{ maxWidth: 800, width: '100%' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 4 }}>
               <img 
                 src="/rhwb-pulse.ico" 
                 alt="RHWB Pulse" 
                 style={{ 
-                  width: 32, 
-                  height: 32, 
-                  marginRight: 12,
-                  borderRadius: '4px'
+                  width: 96, 
+                  height: 96, 
+                  marginRight: 32,
+                  borderRadius: '12px'
                 }} 
               />
-              <Typography variant="h4" gutterBottom align="center">
+              <Typography variant="h2" gutterBottom align="center">
                 {appConfig.appName}
               </Typography>
             </Box>
@@ -171,10 +171,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             src="/rhwb-pulse.ico" 
             alt="RHWB Pulse" 
             style={{ 
-              width: 24, 
-              height: 24, 
-              marginRight: 8,
-              borderRadius: '3px'
+              width: 48, 
+              height: 48, 
+              marginRight: 16,
+              borderRadius: '6px'
             }} 
           />
           <Box>
