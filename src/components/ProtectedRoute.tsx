@@ -92,9 +92,21 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           </Alert>
         ) : (
           <Box sx={{ maxWidth: 400, width: '100%' }}>
-            <Typography variant="h4" gutterBottom align="center">
-              {appConfig.appName}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
+              <img 
+                src="/rhwb-pulse.ico" 
+                alt="RHWB Pulse" 
+                style={{ 
+                  width: 32, 
+                  height: 32, 
+                  marginRight: 12,
+                  borderRadius: '4px'
+                }} 
+              />
+              <Typography variant="h4" gutterBottom align="center">
+                {appConfig.appName}
+              </Typography>
+            </Box>
             <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
               Sign in with your authorized email to access the dashboard
             </Typography>
@@ -154,18 +166,30 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           borderColor: 'divider'
         }}
       >
-        <Box>
-          <Typography variant="h6" component="h1">
-            {appConfig.appName}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Welcome, {user?.name || user?.email} ({user?.role})
-            {isOverrideMode && (
-              <span style={{ color: '#f57c00', fontWeight: 'bold' }}>
-                {' '}(Override Mode)
-              </span>
-            )}
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <img 
+            src="/rhwb-pulse.ico" 
+            alt="RHWB Pulse" 
+            style={{ 
+              width: 24, 
+              height: 24, 
+              marginRight: 8,
+              borderRadius: '3px'
+            }} 
+          />
+          <Box>
+            <Typography variant="h6" component="h1">
+              {appConfig.appName}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Welcome, {user?.name || user?.email} ({user?.role})
+              {isOverrideMode && (
+                <span style={{ color: '#f57c00', fontWeight: 'bold' }}>
+                  {' '}(Override Mode)
+                </span>
+              )}
+            </Typography>
+          </Box>
         </Box>
         
         <Button 
