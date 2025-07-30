@@ -91,7 +91,8 @@ const validateEmailAccess = async (email: string): Promise<{ isValid: boolean; r
     if (error) {
       // Check for specific error types
       if (error.code === 'PGRST116') {
-        return { isValid: false, error: 'Database table not found. Please contact support.' };
+        // This means no rows found - user doesn't exist
+        return { isValid: false, error: 'Use the same email address that you registered with Final Surge.' };
       }
       
       if (error.message?.includes('timeout')) {
@@ -102,7 +103,7 @@ const validateEmailAccess = async (email: string): Promise<{ isValid: boolean; r
     }
 
     if (!data) {
-      return { isValid: false, error: 'Email address not found in authorized users list' };
+      return { isValid: false, error: 'Use the same email address that you registered with Final Surge.' };
     }
 
     // Map database role to UserRole type

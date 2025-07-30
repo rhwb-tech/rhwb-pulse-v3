@@ -107,8 +107,15 @@ function App() {
         .from('rhwb_coaches')
         .select('coach')
         .eq('email_id', email)
-        .then(({ data }) => {
-          if (data && data.length > 0) setCoachName(data[0].coach);
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error fetching coach name:', error);
+          }
+          if (data && data.length > 0) {
+            setCoachName(data[0].coach);
+          } else {
+            console.warn('No coach found for email:', email);
+          }
         });
     }
   }, [userRole, email]);
@@ -137,9 +144,21 @@ function App() {
       } else if (userRole === 'coach' || (userRole === 'hybrid' && hybridToggle === 'myCohorts')) {
         // Coach/Hybrid: fetch runners using the new join query (a.coach)
         const coach = coachName;
+        if (!coach) {
+          console.warn('Coach name not found, cannot fetch runners');
+          setRunnerList([]);
+          return;
+        }
         const seasonNo = Number(season);
-        const { data: runners } = await supabase
+        const { data: runners, error: runnersError } = await supabase
           .rpc('fetch_runners_for_coach', { season_no_parm: seasonNo, coach_name_parm: coach });
+        
+        if (runnersError) {
+          console.error('Error fetching runners for coach:', runnersError);
+          setRunnerList([]);
+          return;
+        }
+        
         setRunnerList((runners || []).map((r: any) => ({ value: r.email_id, label: r.runner_name })));
       } else {
         // Athlete: no runner/coach lists
@@ -223,6 +242,15 @@ function App() {
     }
     // eslint-disable-next-line
   }, [hybridToggle, runnerList]);
+
+  // When coach user loads, auto-select the first runner
+  useEffect(() => {
+    if (userRole === 'coach' && runnerList.length > 0 && !selectedRunner) {
+      setSelectedRunner(runnerList[0].value);
+      setTimeout(() => handleApply(), 0);
+    }
+    // eslint-disable-next-line
+  }, [userRole, runnerList, selectedRunner]);
 
   // When admin selects a coach, auto-select the first runner for that coach
   useEffect(() => {
