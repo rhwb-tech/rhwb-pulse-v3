@@ -11,7 +11,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent } = useAuth();
   const [email, setEmail] = React.useState('');
   const [loginError, setLoginError] = React.useState('');
+  const [rememberMe, setRememberMe] = React.useState(true);
   const appConfig = getAppConfig();
+
+  // Load saved email on component mount
+  React.useEffect(() => {
+    const savedEmail = localStorage.getItem('rhwb_user_email');
+    const savedRememberMe = localStorage.getItem('rhwb_remember_me');
+    
+    if (savedEmail && savedRememberMe === 'true') {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
 
   // Check if we're in override mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -50,7 +62,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         return;
       }
 
-      const result = await login(email);
+      const result = await login(email, rememberMe);
       if (!result.success) {
         setLoginError(result.error || 'Failed to send magic link');
       }
@@ -123,6 +135,25 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
                 sx={{ mb: 3 }}
                 placeholder="Enter your authorized email address"
               />
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <input
+                  type="checkbox"
+                  id="remember-me"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  style={{ marginRight: '8px' }}
+                />
+                <label htmlFor="remember-me" style={{ fontSize: '14px', color: '#666' }}>
+                  Remember me on this device
+                </label>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 3, display: 'block' }}>
+                {rememberMe 
+                  ? "Your login is saved on this computer permanently until you sign out."
+                  : "Your login will only last for this browser session. Uncheck if using a public computer."
+                }
+              </Typography>
               
               <Button 
                 type="submit"

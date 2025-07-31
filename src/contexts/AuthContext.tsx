@@ -14,7 +14,7 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   session: Session | null;
-  login: (email: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, rememberMe: boolean) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -233,7 +233,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (email: string, rememberMe: boolean): Promise<{ success: boolean; error?: string }> => {
     try {
       setIsLoading(true);
       
@@ -248,12 +248,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await supabase.auth.signInWithOtp({
         email: email.toLowerCase(),
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          shouldCreateUser: false
         }
       });
 
       if (error) {
         return { success: false, error: error.message };
+      }
+
+      // Store remember me preference
+      if (rememberMe) {
+        localStorage.setItem('rhwb_remember_me', 'true');
+        localStorage.setItem('rhwb_user_email', email.toLowerCase());
+      } else {
+        localStorage.removeItem('rhwb_remember_me');
+        localStorage.removeItem('rhwb_user_email');
       }
 
       setIsEmailSent(true);
@@ -271,6 +281,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) {
         // Handle logout error silently
       }
+      
+      // Clear local storage on logout
+      localStorage.removeItem('rhwb_remember_me');
+      localStorage.removeItem('rhwb_user_email');
     } catch (error) {
       // Handle logout error silently
     }

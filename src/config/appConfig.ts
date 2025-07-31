@@ -18,6 +18,14 @@ const APP_CONFIGS: Record<string, AppConfig> = {
     supportEmail: 'techteamrhwb@gmail.com',
     supportSubject: 'Unable to login to Pulse'
   },
+  'connect': {
+    appName: 'RHWB Connect',
+    appDomain: 'rhwb-connect.vercel.app',
+    dashboardTitle: 'Connect Portal',
+    emailSubject: 'Sign in to RHWB Connect',
+    supportEmail: 'techteamrhwb@gmail.com',
+    supportSubject: 'Unable to login to Connect'
+  },
   'coach': {
     appName: 'RHWB Coach Portal',
     appDomain: 'rhwb-coach.vercel.app',
@@ -47,6 +55,7 @@ const getCurrentApp = (): string => {
   // Detect from domain
   const hostname = window.location.hostname;
   if (hostname.includes('pulse')) return 'pulse';
+  if (hostname.includes('connect')) return 'connect';
   if (hostname.includes('coach')) return 'coach';
   if (hostname.includes('admin')) return 'admin';
   
