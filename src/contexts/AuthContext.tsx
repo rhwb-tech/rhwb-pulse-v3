@@ -14,7 +14,7 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   session: Session | null;
-  login: (email: string, rememberMe: boolean) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -91,8 +91,7 @@ const validateEmailAccess = async (email: string): Promise<{ isValid: boolean; r
     if (error) {
       // Check for specific error types
       if (error.code === 'PGRST116') {
-        // This means no rows found - user doesn't exist
-        return { isValid: false, error: 'Use the same email address that you registered with Final Surge.' };
+        return { isValid: false, error: 'Database table not found. Please contact support.' };
       }
       
       if (error.message?.includes('timeout')) {
@@ -103,7 +102,7 @@ const validateEmailAccess = async (email: string): Promise<{ isValid: boolean; r
     }
 
     if (!data) {
-      return { isValid: false, error: 'Use the same email address that you registered with Final Surge.' };
+      return { isValid: false, error: 'Email address not found in authorized users list' };
     }
 
     // Map database role to UserRole type
@@ -233,7 +232,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, rememberMe: boolean): Promise<{ success: boolean; error?: string }> => {
+  const login = async (email: string): Promise<{ success: boolean; error?: string }> => {
     try {
       setIsLoading(true);
       
@@ -248,22 +247,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await supabase.auth.signInWithOtp({
         email: email.toLowerCase(),
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-          shouldCreateUser: false
+          emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       });
 
       if (error) {
         return { success: false, error: error.message };
-      }
-
-      // Store remember me preference
-      if (rememberMe) {
-        localStorage.setItem('rhwb_remember_me', 'true');
-        localStorage.setItem('rhwb_user_email', email.toLowerCase());
-      } else {
-        localStorage.removeItem('rhwb_remember_me');
-        localStorage.removeItem('rhwb_user_email');
       }
 
       setIsEmailSent(true);
@@ -281,10 +270,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) {
         // Handle logout error silently
       }
-      
-      // Clear local storage on logout
-      localStorage.removeItem('rhwb_remember_me');
-      localStorage.removeItem('rhwb_user_email');
     } catch (error) {
       // Handle logout error silently
     }

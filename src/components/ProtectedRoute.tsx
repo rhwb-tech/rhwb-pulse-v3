@@ -11,19 +11,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent } = useAuth();
   const [email, setEmail] = React.useState('');
   const [loginError, setLoginError] = React.useState('');
-  const [rememberMe, setRememberMe] = React.useState(true);
   const appConfig = getAppConfig();
-
-  // Load saved email on component mount
-  React.useEffect(() => {
-    const savedEmail = localStorage.getItem('rhwb_user_email');
-    const savedRememberMe = localStorage.getItem('rhwb_remember_me');
-    
-    if (savedEmail && savedRememberMe === 'true') {
-      setEmail(savedEmail);
-      setRememberMe(true);
-    }
-  }, []);
 
   // Check if we're in override mode
   const urlParams = new URLSearchParams(window.location.search);
@@ -62,7 +50,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         return;
       }
 
-      const result = await login(email, rememberMe);
+      const result = await login(email);
       if (!result.success) {
         setLoginError(result.error || 'Failed to send magic link');
       }
@@ -103,19 +91,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             </Button>
           </Alert>
         ) : (
-          <Box sx={{ maxWidth: 800, width: '100%' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 4 }}>
+          <Box sx={{ maxWidth: 400, width: '100%' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
               <img 
                 src="/rhwb-pulse.ico" 
                 alt="RHWB Pulse" 
                 style={{ 
-                  width: 96, 
-                  height: 96, 
-                  marginRight: 32,
-                  borderRadius: '12px'
+                  width: 32, 
+                  height: 32, 
+                  marginRight: 12,
+                  borderRadius: '4px'
                 }} 
               />
-              <Typography variant="h2" gutterBottom align="center">
+              <Typography variant="h4" gutterBottom align="center">
                 {appConfig.appName}
               </Typography>
             </Box>
@@ -135,25 +123,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
                 sx={{ mb: 3 }}
                 placeholder="Enter your authorized email address"
               />
-              
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <input
-                  type="checkbox"
-                  id="remember-me"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  style={{ marginRight: '8px' }}
-                />
-                <label htmlFor="remember-me" style={{ fontSize: '14px', color: '#666' }}>
-                  Remember me on this device
-                </label>
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ mb: 3, display: 'block' }}>
-                {rememberMe 
-                  ? "Your login is saved on this computer permanently until you sign out."
-                  : "Your login will only last for this browser session. Uncheck if using a public computer."
-                }
-              </Typography>
               
               <Button 
                 type="submit"
@@ -202,10 +171,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             src="/rhwb-pulse.ico" 
             alt="RHWB Pulse" 
             style={{ 
-              width: 48, 
-              height: 48, 
-              marginRight: 16,
-              borderRadius: '6px'
+              width: 24, 
+              height: 24, 
+              marginRight: 8,
+              borderRadius: '3px'
             }} 
           />
           <Box>
