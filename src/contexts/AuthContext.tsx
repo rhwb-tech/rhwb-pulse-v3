@@ -206,8 +206,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       async (event, session) => {
         setSession(session);
         
-        if (session?.user) {
-          // Validate the authenticated user against v_pulse_roles
+        // Check for override mode first
+        const urlParams = new URLSearchParams(window.location.search);
+        const overrideEmail = urlParams.get('email');
+        
+        if (overrideEmail) {
+          // In override mode, always use the override email's information
+          const validation = await validateEmailAccess(overrideEmail);
+          if (validation.isValid && validation.role) {
+            const authUser: AuthUser = {
+              email: overrideEmail,
+              role: validation.role,
+              name: validation.fullName || overrideEmail,
+              id: 'override-user'
+            };
+            setUser(authUser);
+          } else {
+            setUser(null);
+          }
+        } else if (session?.user) {
+          // Normal mode - use the authenticated user's information
           const validation = await validateEmailAccess(session.user.email!);
           if (validation.isValid && validation.role) {
             const authUser: AuthUser = {
