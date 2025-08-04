@@ -551,6 +551,15 @@ function App() {
     setShowDebug(debugParam === 'true');
   }, []);
 
+  // Check for email parameter in URL and set as selectedRunner
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const emailParam = urlParams.get('email');
+    if (emailParam) {
+      setSelectedRunner(emailParam);
+    }
+  }, []);
+
   // Log app access to pulse_interactions table
   useEffect(() => {
     const logAppAccess = async () => {
