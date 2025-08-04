@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, useTheme } from '@mui/material';
 import ReactSpeedometer, { CustomSegmentLabelPosition } from 'react-d3-speedometer';
 
 interface CumulativeScoreProps {
@@ -9,28 +9,50 @@ interface CumulativeScoreProps {
 
 const CumulativeScore: React.FC<CumulativeScoreProps> = ({ score, target = 5 }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = window.innerWidth <= 768;
+  
+  // Ensure score is a number
+  const numericScore = typeof score === 'string' ? parseFloat(score) || 0 : score;
   
   // Responsive dimensions
   const gaugeWidth = isMobile ? 260 : 340;
   const gaugeHeight = isMobile ? 160 : 220;
-  const fontSize = isMobile ? "24px" : "32px";
+  const fontSize = isMobile ? "20px" : "28px";
   
   return (
-    <Box sx={{ width: '100%', height: 350, bgcolor: 'background.paper', borderRadius: 2, p: 2, boxShadow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      <Typography variant="h6" gutterBottom>
+    <Box sx={{ 
+      width: '100%', 
+      height: isMobile ? 320 : 350, 
+      bgcolor: 'background.paper', 
+      borderRadius: 2, 
+      p: isMobile ? 1.5 : 2, 
+      boxShadow: 1, 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'center', 
+      justifyContent: 'center' 
+    }}>
+      <Typography 
+        variant="h6" 
+        gutterBottom 
+        sx={{ 
+          fontSize: isMobile ? '1.1rem' : '1.25rem',
+          fontWeight: 600,
+          mb: isMobile ? 1 : 2
+        }}
+      >
         Cumulative Score
       </Typography>
       <Box sx={{ 
         width: '100%', 
         maxWidth: gaugeWidth, 
-        height: gaugeHeight + 20,
+        height: gaugeHeight + (isMobile ? 10 : 20),
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center'
       }}>
         <ReactSpeedometer
-          value={score}
+          value={numericScore}
           minValue={0}
           maxValue={target}
           segments={5}
@@ -51,7 +73,14 @@ const CumulativeScore: React.FC<CumulativeScoreProps> = ({ score, target = 5 }) 
           forceRender={true}
         />
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+      <Typography 
+        variant="body2" 
+        color="text.secondary" 
+        sx={{ 
+          mt: isMobile ? 0.5 : 1,
+          fontSize: isMobile ? '14px' : '16px'
+        }}
+      >
         Target: {target}
       </Typography>
     </Box>

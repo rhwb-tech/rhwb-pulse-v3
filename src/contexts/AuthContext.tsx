@@ -27,6 +27,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Helper function to validate email against v_pulse_roles table
 const validateEmailAccess = async (email: string): Promise<{ isValid: boolean; role?: UserRole; fullName?: string; error?: string }> => {
   try {
+    
     // Check Supabase configuration first
     if (!process.env.REACT_APP_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL.includes('<YOUR_SUPABASE_URL>')) {
       const fallbackRole = determineUserRole(email);

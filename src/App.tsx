@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Container, CircularProgress, Alert, Typography, Box, Grid, AppBar, Toolbar, Chip, Stack, Skeleton, FormControl, InputLabel, Select, MenuItem, Menu, ListItemText } from '@mui/material';
+import { Alert, Typography, Box, Grid, Chip, Stack, Skeleton, MenuItem, Menu, ListItemText, useMediaQuery } from '@mui/material';
 import QuantitativeScores, { QuantitativeScoreData } from './components/QuantitativeScores';
+import QuantitativeScoresMobile, { QuantitativeScoreMobileData } from './components/QuantitativeScoresMobile';
 import FilterPanel, { UserRole } from './components/FilterPanel';
 import { supabase } from './components/supabaseClient';
 import CumulativeScore from './components/CumulativeScore';
 import ActivitySummary from './components/ActivitySummary';
 import TrainingFeedback from './components/TrainingFeedback';
 import { useAuth } from './contexts/AuthContext';
-import { getAppConfig } from './config/appConfig';
 
 interface Option {
   value: string;
@@ -48,6 +48,7 @@ function App() {
 
   // Widget data
   const [data, setData] = useState<QuantitativeScoreData[]>([]);
+  const [qualitativeData, setQualitativeData] = useState<QuantitativeScoreMobileData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +70,9 @@ function App() {
 
   // Debug mode state from URL parameter
   const [showDebug, setShowDebug] = useState(false);
+
+  // Responsive breakpoint for mobile detection
+  const isMobile = useMediaQuery('(max-width:768px)');
 
   // Authentication is now handled by JWT context
 
@@ -173,25 +177,37 @@ function App() {
   const fetchWidgetData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    
+    // Fetch quantitative data (use same view for both charts)
     let query = supabase.from('v_quantitative_scores').select('meso, quant_coach, quant_personal, quant_race_distance');
+    
     if (userRole === 'admin') {
       if (selectedRunner) {
         query = query.eq('season', `Season ${season}`).eq('email_id', selectedRunner);
       } else {
-        setData([]); setLoading(false); return;
+        setData([]); 
+        setQualitativeData([]);
+        setLoading(false); 
+        return;
       }
     } else if (userRole === 'coach') {
       if (selectedRunner) {
         query = query.eq('season', `Season ${season}`).eq('email_id', selectedRunner);
       } else {
-        setData([]); setLoading(false); return;
+        setData([]); 
+        setQualitativeData([]);
+        setLoading(false); 
+        return;
       }
     } else if (userRole === 'hybrid') {
       if (hybridToggle === 'myCohorts') {
         if (selectedRunner) {
           query = query.eq('season', `Season ${season}`).eq('email_id', selectedRunner);
         } else {
-          setData([]); setLoading(false); return;
+          setData([]); 
+          setQualitativeData([]);
+          setLoading(false); 
+          return;
         }
       } else {
         query = query.eq('season', `Season ${season}`).eq('email_id', email);
@@ -200,19 +216,33 @@ function App() {
       // athlete
       query = query.eq('season', `Season ${season}`).eq('email_id', email);
     }
+    
     const { data: rows, error } = await query;
+    
     if (error) {
       setError(error.message);
       setLoading(false);
       return;
     }
-    const formatted: QuantitativeScoreData[] = (rows || []).map((row: any) => ({
+    
+    // Format data for quantitative chart (vertical bars)
+    const formattedQuant: QuantitativeScoreData[] = (rows || []).map((row: any) => ({
       meso: row.meso,
       personal: row.quant_personal,
       coach: row.quant_coach,
       raceDistance: row.quant_race_distance,
     }));
-    setData(formatted);
+    
+    // Format same data for qualitative chart (horizontal bars) - using same data but different display
+    const formattedQual: QuantitativeScoreMobileData[] = (rows || []).map((row: any) => ({
+      meso: row.meso,
+      personal: row.quant_personal, // Using same data for now
+      coach: row.quant_coach,       // Using same data for now
+      raceDistance: row.quant_race_distance, // Using same data for now
+    }));
+    
+    setData(formattedQuant);
+    setQualitativeData(formattedQual);
     setLoading(false);
   }, [season, email, userRole, selectedCoach, selectedRunner, hybridToggle]);
 
@@ -334,10 +364,30 @@ function App() {
     setHybridToggleMenuAnchor(null);
   };
 
-  const handleHybridToggleChangeFromChip = (newToggle: 'myScore' | 'myCohorts') => {
+  const handleHybridToggleChangeFromChip = async (newToggle: 'myScore' | 'myCohorts') => {
     setHybridToggle(newToggle);
     setHybridToggleMenuAnchor(null);
     setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+    
+    // Log the toggle interaction
+    if (user?.email) {
+      try {
+        const { error } = await supabase
+          .from('pulse_interactions')
+          .insert({
+            email_id: user.email,
+            event_name: 'hybrid toggle',
+            value_text: newToggle,
+            value_label: `From ${hybridToggle} to ${newToggle}`
+          });
+        
+        if (error) {
+          console.error('Error logging hybrid toggle interaction:', error);
+        }
+      } catch (err) {
+        console.error('Error logging hybrid toggle interaction:', err);
+      }
+    }
   };
 
   // Determine which props to show in FilterPanel
@@ -405,37 +455,57 @@ function App() {
     fetchCumulativeScore();
   }, [fetchCumulativeScore]);
 
-  const [mileagePercent, setMileagePercent] = useState<number | null>(null);
-  const [strengthPercent, setStrengthPercent] = useState<number | null>(null);
+  const [activitySummary, setActivitySummary] = useState<{
+    mileage: { percent: number | null; planned: number | null; completed: number | null };
+    strength: { percent: number | null; planned: number | null; completed: number | null };
+  }>({
+    mileage: { percent: null, planned: null, completed: null },
+    strength: { percent: null, planned: null, completed: null }
+  });
   const [trainingFeedback, setTrainingFeedback] = useState<Array<{meso: string, qual: string}>>([]);
 
   // Fetch Activity Summary data for the selected runner (or logged-in user)
   const fetchActivitySummary = useCallback(async () => {
     const runnerEmail = selectedRunner || email;
     if (!runnerEmail) {
-      setMileagePercent(null);
-      setStrengthPercent(null);
+      setActivitySummary({
+        mileage: { percent: null, planned: null, completed: null },
+        strength: { percent: null, planned: null, completed: null }
+      });
       return;
     }
     // Fetch activity summary for this runner and season
     const { data: rows, error } = await supabase
       .from('v_activity_summary')
-      .select('category, percent_completed')
+      .select('category, percent_completed, planned, completed')
       .eq('season', `Season ${season}`)
       .eq('email_id', runnerEmail);
     if (error || !rows) {
-      setMileagePercent(null);
-      setStrengthPercent(null);
+      setActivitySummary({
+        mileage: { percent: null, planned: null, completed: null },
+        strength: { percent: null, planned: null, completed: null }
+      });
       return;
     }
-    let mileage = null;
-    let strength = null;
+    let mileage = { percent: null, planned: null, completed: null };
+    let strength = { percent: null, planned: null, completed: null };
     for (const row of rows) {
-      if (row.category === 'Mileage') mileage = row.percent_completed;
-      if (row.category === 'Strength') strength = row.percent_completed;
+      if (row.category === 'Mileage') {
+        mileage = {
+          percent: row.percent_completed,
+          planned: row.planned,
+          completed: row.completed
+        };
+      }
+      if (row.category === 'Strength') {
+        strength = {
+          percent: row.percent_completed,
+          planned: row.planned,
+          completed: row.completed
+        };
+      }
     }
-    setMileagePercent(mileage);
-    setStrengthPercent(strength);
+    setActivitySummary({ mileage, strength });
   }, [selectedRunner, email, season]);
 
   // Fetch Training Feedback data for the selected runner (or logged-in user)
@@ -517,19 +587,10 @@ function App() {
     }
   };
 
-  const appConfig = getAppConfig();
-  const dashboardTitle = appConfig.dashboardTitle || 'Athlete Performance';
+
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* AppBar with Hamburger Menu */}
-      <AppBar position="static" color="default" elevation={1} sx={{ mb: 3 }}>
-        <Toolbar>
-          <Typography variant="h5" component="h1" sx={{ flexGrow: 1 }}>
-            Pulse
-          </Typography>
-        </Toolbar>
-      </AppBar>
+    <Box sx={{ px: { xs: 1, sm: 2, md: 3 }, py: 1 }}>
       {/* Selection Chips Panel */}
       <Box sx={{ 
         mb: 2, 
@@ -789,44 +850,15 @@ function App() {
 
 
 
-      {/* Dashboard Container with header and widgets */}
-      <Box sx={{
-        bgcolor: '#f7f9fb', // light gray for contrast
-        borderRadius: 4,
-        boxShadow: 2,
-        p: { xs: 2, sm: 4 },
-        mt: 2,
-        maxWidth: 900,
-        mx: 'auto',
-      }}>
-        {/* Dashboard Header */}
-        <Typography
-          variant="h4"
-          component="h2"
-          align="center"
-          sx={{
-            fontWeight: 700,
-            color: '#1976d2',
-            mb: 2,
-            mt: 1,
-            letterSpacing: 0.5,
-            fontSize: { xs: '2rem', sm: '2.5rem', md: '2.75rem' },
-            display: { xs: 'none', sm: 'block' }, // Hide on mobile, show on sm and up
-          }}
-        >
-          {dashboardTitle}
-        </Typography>
-        <Box sx={{ width: '100%', mb: 3, display: { xs: 'none', sm: 'block' } }}>
-          <Box sx={{ borderBottom: '2px solid #e3f2fd', width: '80%', mx: 'auto' }} />
-        </Box>
+      {/* Widgets Grid */}
         {/* Widgets Grid */}
         {loading ? (
-          <Grid container spacing={4} sx={{ mt: 1 }}>
+          <Grid container spacing={{ xs: 1, sm: 2, md: 4 }} sx={{ mt: { xs: 0, sm: 1 } }}>
             {/* Top row skeleton */}
             <Grid item xs={12}>
               <Box sx={{ 
                 width: '100%', 
-                borderLeft: '4px solid #1976d2', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
                 borderRadius: 2, 
                 bgcolor: 'white', 
                 p: 2, 
@@ -842,7 +874,7 @@ function App() {
             <Grid item xs={12} md={6}>
               <Box sx={{ 
                 width: '100%', 
-                borderLeft: '4px solid #1976d2', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
                 borderRadius: 2, 
                 bgcolor: 'white', 
                 p: 2, 
@@ -858,7 +890,7 @@ function App() {
             <Grid item xs={12} md={6}>
               <Box sx={{ 
                 width: '100%', 
-                borderLeft: '4px solid #1976d2', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
                 borderRadius: 2, 
                 bgcolor: 'white', 
                 p: 2, 
@@ -877,25 +909,40 @@ function App() {
         ) : error ? (
           <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
         ) : (
-          <Grid container spacing={4} sx={{ mt: 1 }}>
+          <Grid container spacing={{ xs: 1, sm: 2, md: 4 }} sx={{ mt: { xs: 0, sm: 1 } }}>
             {/* Top row - Full width chart */}
             <Grid item xs={12}>
               <Box sx={{ 
                 width: '100%', 
-                borderLeft: '4px solid #1976d2', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
                 borderRadius: 2, 
                 bgcolor: 'white',
                 overflow: 'hidden',
-                boxShadow: 1
+                boxShadow: 1,
+                display: isMobile ? 'none' : 'block'
               }}>
                 <QuantitativeScores data={data} />
+              </Box>
+            </Grid>
+            {/* Mobile Quantitative Score - Full width vertical chart */}
+            <Grid item xs={12}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
+                borderRadius: 2, 
+                bgcolor: 'white',
+                overflow: 'hidden',
+                boxShadow: 1,
+                display: isMobile ? 'block' : 'none'
+              }}>
+                <QuantitativeScoresMobile data={qualitativeData} />
               </Box>
             </Grid>
             {/* Bottom row - Side by side on md+ */}
             <Grid item xs={12} md={6}>
               <Box sx={{ 
                 width: '100%', 
-                borderLeft: '4px solid #1976d2', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
                 borderRadius: 2, 
                 bgcolor: 'white',
                 overflow: 'hidden',
@@ -907,15 +954,14 @@ function App() {
             <Grid item xs={12} md={6}>
               <Box sx={{ 
                 width: '100%', 
-                borderLeft: '4px solid #1976d2', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
                 borderRadius: 2, 
                 bgcolor: 'white',
                 overflow: 'hidden',
                 boxShadow: 1
               }}>
                 <ActivitySummary
-                  mileagePercent={mileagePercent ?? 0}
-                  strengthPercent={strengthPercent ?? 0}
+                  activityData={activitySummary}
                 />
               </Box>
             </Grid>
@@ -923,13 +969,17 @@ function App() {
             <Grid item xs={12}>
               <Box sx={{ 
                 width: '100%', 
-                borderLeft: '4px solid #1976d2', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
                 borderRadius: 2, 
                 bgcolor: 'white',
                 overflow: 'hidden',
                 boxShadow: 1
               }}>
-                <TrainingFeedback feedback={trainingFeedback} userEmail={user?.email} />
+                <TrainingFeedback 
+                  feedback={trainingFeedback} 
+                  userEmail={user?.email} 
+                  emailId={selectedRunner || email}
+                />
               </Box>
             </Grid>
           </Grid>
@@ -995,16 +1045,26 @@ AND category = 'Personal'
                 </Typography>
                 <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
                   <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-SELECT category, percent_completed FROM v_activity_summary 
+SELECT category, percent_completed, planned, completed FROM v_activity_summary 
 WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Pulse Interactions:</strong>
+                </Typography>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT value_text, value_label FROM pulse_interactions 
+WHERE email_id = '{selectedRunner || email}' 
+AND event_name = 'training feedback'
                   </Typography>
                 </Box>
               </Box>
             </Box>
           </Box>
         )}
-      </Box>
-    </Container>
+    </Box>
   );
 }
 

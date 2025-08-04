@@ -1,78 +1,195 @@
 import React from 'react';
-import { Box, Typography, Stack } from '@mui/material';
+import { Box, Typography, Grid } from '@mui/material';
 
 interface ActivitySummaryProps {
-  mileagePercent: number;
-  strengthPercent: number;
+  activityData: {
+    mileage: { percent: number | null; planned: number | null; completed: number | null };
+    strength: { percent: number | null; planned: number | null; completed: number | null };
+  };
 }
 
-const CIRCLE_SIZE = 120;
-const STROKE_WIDTH = 10;
-const RADIUS = (CIRCLE_SIZE - STROKE_WIDTH) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-function ProgressCircle({ percent, color, label }: { percent: number; color: string; label: string }) {
+function ProgressCircle({ percent, color, label, size = 120 }: { percent: number; color: string; label: string; size?: number }) {
+  const isMobile = window.innerWidth <= 768;
+  const strokeWidth = size * 0.08; // 8% of size
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
   const progress = Math.max(0, Math.min(percent, 100));
-  const offset = CIRCUMFERENCE * (1 - progress / 100);
+  const offset = circumference * (1 - progress / 100);
+  
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <Box sx={{ position: 'relative', width: CIRCLE_SIZE, height: CIRCLE_SIZE }}>
-        <svg width={CIRCLE_SIZE} height={CIRCLE_SIZE}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 1 }}>
+      <Box sx={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
           <circle
-            cx={CIRCLE_SIZE / 2}
-            cy={CIRCLE_SIZE / 2}
-            r={RADIUS}
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
             fill="none"
-            stroke="#e5e7eb"
-            strokeWidth={STROKE_WIDTH}
+            stroke="#f0f0f0"
+            strokeWidth={strokeWidth}
           />
           <circle
-            cx={CIRCLE_SIZE / 2}
-            cy={CIRCLE_SIZE / 2}
-            r={RADIUS}
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
             fill="none"
             stroke={color}
-            strokeWidth={STROKE_WIDTH}
-            strokeDasharray={CIRCUMFERENCE}
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
             strokeDashoffset={offset}
             strokeLinecap="round"
-            style={{ transition: 'stroke-dashoffset 0.7s' }}
-            transform={`rotate(-90 ${CIRCLE_SIZE / 2} ${CIRCLE_SIZE / 2})`}
+            style={{ transition: 'stroke-dashoffset 0.5s ease-in-out' }}
           />
         </svg>
         <Box sx={{
           position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          fontSize: isMobile ? '18px' : '20px',
+          fontWeight: 'bold',
+          color: '#333',
+          textAlign: 'center'
         }}>
-          <Typography variant="h5" fontWeight={700} color="#222" sx={{ lineHeight: 1 }}>
-            {progress.toFixed(1)}%
-          </Typography>
-          <Typography variant="subtitle1" color="#555" sx={{ mt: 0.5 }}>
-            {label}
-          </Typography>
+          {Math.round(progress)}%
         </Box>
       </Box>
+      <Typography 
+        variant="subtitle1" 
+        color="#555" 
+        sx={{ 
+          mt: 1,
+          mb: 0.5,
+          fontSize: isMobile ? '14px' : '14px',
+          fontWeight: 600,
+          color: color,
+          textAlign: 'center',
+          lineHeight: 1.2
+        }}
+      >
+        {label}
+      </Typography>
     </Box>
   );
 }
 
-const ActivitySummary: React.FC<ActivitySummaryProps> = ({ mileagePercent, strengthPercent }) => {
+// Info card component for displaying planned/completed values
+const InfoCard = ({ title, value, color, bgColor }: { title: string; value: number | null; color: string; bgColor: string }) => {
+  const isMobile = window.innerWidth <= 768;
+  
   return (
-    <Box sx={{ width: '100%', height: 350, bgcolor: 'background.paper', borderRadius: 2, p: 2, boxShadow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-      <Typography variant="h6" gutterBottom>
+    <Box sx={{
+      backgroundColor: bgColor,
+      borderRadius: '12px',
+      padding: isMobile ? '16px' : '12px',
+      flex: '1',
+      minWidth: '0'
+    }}>
+      <Typography sx={{
+        color: color,
+        fontSize: isMobile ? '14px' : '14px',
+        fontWeight: '600',
+        mb: 1
+      }}>
+        {title}
+      </Typography>
+      <Typography sx={{
+        fontSize: isMobile ? '2rem' : '2rem',
+        fontWeight: 'bold',
+        color: color,
+        lineHeight: '1'
+      }}>
+        {value || 0}
+      </Typography>
+    </Box>
+  );
+};
+
+const ActivitySummary: React.FC<ActivitySummaryProps> = ({ activityData }) => {
+  const isMobile = window.innerWidth <= 768;
+  const mileagePercent = activityData.mileage.percent || 0;
+  const strengthPercent = activityData.strength.percent || 0;
+  
+  return (
+    <Box sx={{ 
+      width: '100%', 
+      height: isMobile ? 400 : 350, 
+      bgcolor: 'background.paper', 
+      borderRadius: 2, 
+      p: isMobile ? 1.5 : 2, 
+      boxShadow: 1, 
+      display: 'flex', 
+      flexDirection: 'column'
+    }}>
+      <Typography 
+        variant="h6" 
+        gutterBottom 
+        sx={{ 
+          fontSize: isMobile ? '1.1rem' : '1.25rem',
+          fontWeight: 600,
+          mb: isMobile ? 2 : 3
+        }}
+      >
         Activity Summary
       </Typography>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={6} alignItems="center" justifyContent="center" sx={{ mt: 2 }}>
-        <ProgressCircle percent={strengthPercent} color="#5B5BF6" label="Strength" />
-        <ProgressCircle percent={mileagePercent} color="#14B8C4" label="Mileage" />
-      </Stack>
+      
+      {/* Progress Circles */}
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        mb: isMobile ? 3 : 2,
+        gap: isMobile ? '20px' : '10px'
+      }}>
+        <ProgressCircle 
+          percent={strengthPercent} 
+          color="#4285F4" 
+          label="Strength % Completed"
+          size={isMobile ? 100 : 90}
+        />
+        <ProgressCircle 
+          percent={mileagePercent} 
+          color="#9C27B0" 
+          label="Mileage % Completed"
+          size={isMobile ? 100 : 90}
+        />
+      </Box>
+
+      {/* Info Cards */}
+      <Grid container spacing={isMobile ? 1.5 : 1} sx={{ flex: 1 }}>
+        <Grid item xs={6}>
+          <InfoCard
+            title="Strength Planned"
+            value={activityData.strength.planned}
+            color="#4285F4"
+            bgColor="#f8f9ff"
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <InfoCard
+            title="Strength Completed"
+            value={activityData.strength.completed}
+            color="#34A853"
+            bgColor="#f8fff9"
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <InfoCard
+            title="Mileage Planned"
+            value={activityData.mileage.planned}
+            color="#9C27B0"
+            bgColor="#fdf8ff"
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <InfoCard
+            title="Mileage Completed"
+            value={activityData.mileage.completed}
+            color="#4285F4"
+            bgColor="#f8f9ff"
+          />
+        </Grid>
+      </Grid>
     </Box>
   );
 };
