@@ -175,6 +175,12 @@ function App() {
 
   // Fetch widget data (QuantitativeScores) on Apply
   const fetchWidgetData = useCallback(async () => {
+    await fetchWidgetDataForRunner(selectedRunner);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season, email, userRole, selectedRunner, hybridToggle]);
+
+  // Fetch widget data for a specific runner
+  const fetchWidgetDataForRunner = useCallback(async (runnerEmail: string) => {
     setLoading(true);
     setError(null);
     
@@ -182,8 +188,8 @@ function App() {
     let query = supabase.from('v_quantitative_scores').select('meso, quant_coach, quant_personal, quant_race_distance');
     
     if (userRole === 'admin') {
-      if (selectedRunner) {
-        query = query.eq('season', `Season ${season}`).eq('email_id', selectedRunner);
+      if (runnerEmail) {
+        query = query.eq('season', `Season ${season}`).eq('email_id', runnerEmail);
       } else {
         setData([]); 
         setQualitativeData([]);
@@ -191,8 +197,8 @@ function App() {
         return;
       }
     } else if (userRole === 'coach') {
-      if (selectedRunner) {
-        query = query.eq('season', `Season ${season}`).eq('email_id', selectedRunner);
+      if (runnerEmail) {
+        query = query.eq('season', `Season ${season}`).eq('email_id', runnerEmail);
       } else {
         setData([]); 
         setQualitativeData([]);
@@ -201,8 +207,8 @@ function App() {
       }
     } else if (userRole === 'hybrid') {
       if (hybridToggle === 'myCohorts') {
-        if (selectedRunner) {
-          query = query.eq('season', `Season ${season}`).eq('email_id', selectedRunner);
+        if (runnerEmail) {
+          query = query.eq('season', `Season ${season}`).eq('email_id', runnerEmail);
         } else {
           setData([]); 
           setQualitativeData([]);
@@ -244,7 +250,7 @@ function App() {
     setData(formattedQuant);
     setQualitativeData(formattedQual);
     setLoading(false);
-  }, [season, email, userRole, selectedCoach, selectedRunner, hybridToggle]);
+  }, [season, email, userRole, hybridToggle]);
 
   // On initial app load or when email changes from URL, fetch Quantitative Scores
   useEffect(() => {
@@ -352,7 +358,11 @@ function App() {
   const handleRunnerChangeFromChip = (newRunner: string) => {
     setSelectedRunner(newRunner);
     setRunnerMenuAnchor(null);
-    setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+    // Use the newRunner value directly instead of relying on state update
+    setTimeout(() => {
+      // Pass the new runner value directly to avoid stale state
+      fetchWidgetDataForRunner(newRunner);
+    }, 0); // Ensure state is updated before applying
   };
 
   // Hybrid toggle dropdown handlers
@@ -367,7 +377,18 @@ function App() {
   const handleHybridToggleChangeFromChip = async (newToggle: 'myScore' | 'myCohorts') => {
     setHybridToggle(newToggle);
     setHybridToggleMenuAnchor(null);
-    setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+    
+    // If switching to 'myCohorts' and we have runners, select the first one
+    if (newToggle === 'myCohorts' && runnerList.length > 0) {
+      setSelectedRunner(runnerList[0].value);
+      setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+    } else if (newToggle === 'myScore') {
+      // Clear selected runner when switching to 'myScore'
+      setSelectedRunner('');
+      setTimeout(() => handleApply(), 0);
+    } else {
+      setTimeout(() => handleApply(), 0);
+    }
     
     // Log the toggle interaction
     if (user?.email) {

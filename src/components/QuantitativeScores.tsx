@@ -51,7 +51,7 @@ const QuantitativeScores: React.FC<QuantitativeScoresProps> = ({ data }) => {
           data={data} 
           margin={{ 
             top: isMobile ? 20 : 25, 
-            right: isMobile ? 12 : 24, 
+            right: isMobile ? 12 : 40, 
             left: isMobile ? 20 : 35, 
             bottom: isMobile ? 5 : 8 
           }}
