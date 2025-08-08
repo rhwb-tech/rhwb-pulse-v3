@@ -1,8 +1,8 @@
 import React from 'react';
-import { Box, Typography, useTheme, IconButton, Tooltip as MuiTooltip } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip as MuiTooltip } from '@mui/material';
 import InfoIcon from '@mui/icons-material/Info';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Label, LabelList,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList,
 } from 'recharts';
 
 // Types for the data
@@ -24,7 +24,6 @@ const COLORS = {
 };
 
 const QuantitativeScoresMobile: React.FC<QuantitativeScoresMobileProps> = ({ data }) => {
-  const theme = useTheme();
 
   return (
     <Box sx={{ width: '100%', height: 350, bgcolor: 'background.paper', borderRadius: 2, p: 2, boxShadow: 1 }}>

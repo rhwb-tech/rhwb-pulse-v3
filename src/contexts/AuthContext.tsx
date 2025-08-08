@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
+import { Session } from '@supabase/supabase-js';
 import { supabase } from '../components/supabaseClient';
 import { UserRole } from '../components/FilterPanel';
-import { getAppConfig } from '../config/appConfig';
 
 interface AuthUser {
   email: string;
@@ -53,7 +52,7 @@ const validateEmailAccess = async (email: string): Promise<{ isValid: boolean; r
         .select('count')
         .limit(1);
       
-      const { data: testData, error: testError } = await Promise.race([connectionTest, connectionTimeout]) as any;
+      const { error: testError } = await Promise.race([connectionTest, connectionTimeout]) as any;
       
       if (testError) {
         if (testError.code === 'PGRST116') {

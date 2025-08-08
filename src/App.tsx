@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Alert, Typography, Box, Grid, Chip, Stack, Skeleton, MenuItem, Menu, ListItemText, useMediaQuery } from '@mui/material';
+import { Alert, Typography, Box, Grid, Chip, Stack, Skeleton, MenuItem, Menu, ListItemText, useMediaQuery, TextField } from '@mui/material';
 import QuantitativeScores, { QuantitativeScoreData } from './components/QuantitativeScores';
 import QuantitativeScoresMobile, { QuantitativeScoreMobileData } from './components/QuantitativeScoresMobile';
-import FilterPanel, { UserRole } from './components/FilterPanel';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import type { UserRole } from './components/FilterPanel';
 import { supabase } from './components/supabaseClient';
 import CumulativeScore from './components/CumulativeScore';
 import ActivitySummary from './components/ActivitySummary';
@@ -20,23 +21,11 @@ function getQuantSql(season: string, email: string) {
   return `SELECT meso, max(case when category='Personal' then quant end)  as quant_personal,\n       max(case when category='Race Distance' then quant end) as quant_race_distance,\n       max(case when category='Coach' then quant end) as quant_coach\n       FROM rhwb_meso_scores where season = '${season ? `Season ${season}` : ''}' and email_id = '${email}'\nGROUP BY meso`;
 }
 
-function getHybridRunnerSql(season: string, email: string) {
-  return `SELECT email_id FROM runner_season_info WHERE season = '${season}' AND coach = '${email}'`;
-}
-
-function getRunnerListSql(season: string, coach: string) {
-  return `SELECT a.email_id, c.runner_name, b.coach FROM runner_season_info a\n    inner join runners_profile c on a.email_id = c.email_id\n    inner join rhwb_coaches b on a.coach = b.coach\n    WHERE season_no = '${season}' AND a.coach = '${coach}'`;
-}
-
-function getCoachListSql(season: string) {
-  return `SELECT DISTINCT coach FROM runner_season_info WHERE season = '${season}' AND coach IS NOT NULL`;
-}
-
 function App() {
   const { user } = useAuth();
   
   // Filter state
-  const [season, setSeason] = useState(DEFAULT_SEASON);
+  const [season, setSeason] = useState('14'); // Default to Season 14
   const email = user?.email || '';
   const userRole = user?.role || 'athlete';
   const [coachList, setCoachList] = useState<Option[]>([]);
@@ -45,6 +34,8 @@ function App() {
   const [selectedRunner, setSelectedRunner] = useState('');
   const [hybridToggle, setHybridToggle] = useState<'myScore' | 'myCohorts'>('myScore');
   const [coachName, setCoachName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Option[]>([]);
 
   // Widget data
   const [data, setData] = useState<QuantitativeScoreData[]>([]);
@@ -76,33 +67,48 @@ function App() {
 
   // Authentication is now handled by JWT context
 
-  // Fetch available seasons
+
+
+  // Set hardcoded season options
   useEffect(() => {
-    const fetchSeasons = async () => {
-      const { data: seasons, error } = await supabase
-        .from('rhwb_meso_scores')
-        .select('season')
-        .not('season', 'is', null);
-      
-      if (error) {
-        console.error('Error fetching seasons:', error);
-        return;
-      }
-      
-      // Extract unique seasons and sort them in descending order
-      const uniqueSeasons = Array.from(new Set(seasons?.map(s => s.season) || []))
-        .filter(season => season && season.includes('Season'))
-        .map(season => {
-          const seasonNumber = season.replace('Season ', '');
-          return { value: seasonNumber, label: season };
-        })
-        .sort((a, b) => parseInt(b.value) - parseInt(a.value)); // Sort descending
-      
-      setSeasonOptions(uniqueSeasons);
-    };
-    
-    fetchSeasons();
+    const hardcodedSeasons = [
+      { value: '14', label: 'Season 14' },
+      { value: '13', label: 'Season 13' }
+    ];
+    setSeasonOptions(hardcodedSeasons);
   }, []);
+
+  // Search runners for admin users
+  const searchRunners = async (query: string) => {
+    if (!query.trim() || userRole !== 'admin') {
+      setSearchResults([]);
+      return;
+    }
+
+    const { data: runners, error } = await supabase
+      .from('rhwb_meso_scores')
+      .select('email_id, full_name')
+      .or(`email_id.ilike.%${query}%,full_name.ilike.%${query}%`)
+      .limit(10);
+
+    if (error) {
+      console.error('Error searching runners:', error);
+      return;
+    }
+
+    const uniqueRunners = Array.from(new Set(runners?.map(r => r.email_id) || []))
+      .map(emailId => {
+        const runner = runners?.find(r => r.email_id === emailId);
+        return {
+          value: emailId,
+          label: runner?.full_name || emailId
+        };
+      });
+
+    setSearchResults(uniqueRunners);
+  };
+
+
 
   // Fetch coach name for coach/hybrid roles
   useEffect(() => {
@@ -130,7 +136,7 @@ function App() {
     const fetchLists = async () => {
       if (userRole === 'admin') {
         // Admin: fetch all active coaches
-        const { data: coaches, error: coachErr } = await supabase
+        const { data: coaches } = await supabase
           .from('rhwb_coaches')
           .select('coach')
           .eq('status', 'Active');
@@ -374,6 +380,21 @@ function App() {
     setHybridToggleMenuAnchor(null);
   };
 
+  // Handle search input changes
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const query = event.target.value;
+    setSearchQuery(query);
+    searchRunners(query);
+  };
+
+  // Handle runner selection from search
+  const handleRunnerSelect = (runnerEmail: string) => {
+    setSelectedRunner(runnerEmail);
+    setSearchQuery('');
+    setSearchResults([]);
+    setTimeout(() => handleApply(), 0);
+  };
+
   const handleHybridToggleChangeFromChip = async (newToggle: 'myScore' | 'myCohorts') => {
     setHybridToggle(newToggle);
     setHybridToggleMenuAnchor(null);
@@ -608,14 +629,7 @@ function App() {
     logAppAccess();
   }, [user?.email]); // Only run when user email changes (i.e., when user logs in)
 
-  const getRoleDisplayName = (role: UserRole) => {
-    switch (role) {
-      case 'admin': return 'Administrative View';
-      case 'coach': return 'Coach View';
-      case 'hybrid': return 'Athlete Performance';
-      default: return 'Athlete View';
-    }
-  };
+
 
 
 
@@ -807,10 +821,68 @@ function App() {
                 }}
               />
             )}
+            
+            {/* Search box for admin users */}
+            {userRole === 'admin' && (
+              <Box sx={{ position: 'relative', minWidth: 200 }}>
+                <TextField
+                  size="small"
+                  placeholder="Search runner by name or email..."
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 2,
+                      fontSize: { xs: 14, sm: 16 },
+                      minHeight: 40,
+                    },
+                  }}
+                />
+                {searchResults.length > 0 && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      right: 0,
+                      bgcolor: 'white',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: 1,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                      zIndex: 1000,
+                      maxHeight: 200,
+                      overflow: 'auto',
+                    }}
+                  >
+                    {searchResults.map((runner) => (
+                      <Box
+                        key={runner.value}
+                        onClick={() => handleRunnerSelect(runner.value)}
+                        sx={{
+                          p: 1,
+                          cursor: 'pointer',
+                          '&:hover': {
+                            bgcolor: '#f5f5f5',
+                          },
+                          borderBottom: '1px solid #f0f0f0',
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {runner.label}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#666' }}>
+                          {runner.value}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )}
           </Stack>
           
           {/* Second Row - Runner Chip (Mobile) or Same Row (Desktop) */}
-          {selectedRunner && (
+          {selectedRunner && (userRole === 'coach' || userRole === 'hybrid') && (
             <Chip
               label={runnerList.find(r => r.value === selectedRunner)?.label || selectedRunner}
               onClick={handleRunnerMenuOpen}
@@ -831,50 +903,52 @@ function App() {
               }}
             />
           )}
-          <Menu
-            anchorEl={runnerMenuAnchor}
-            open={runnerMenuOpen}
-            onClose={handleRunnerMenuClose}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'left',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'left',
-            }}
-            PaperProps={{
-              sx: {
-                mt: 1,
-                minWidth: 200,
-                maxHeight: 300,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-                borderRadius: 2,
-                border: '1px solid #e0e0e0',
-              }
-            }}
-          >
-            {runnerList.map((runnerOption) => (
-              <MenuItem
-                key={runnerOption.value}
-                onClick={() => handleRunnerChangeFromChip(runnerOption.value)}
-                selected={selectedRunner === runnerOption.value}
-                sx={{
-                  minHeight: 40,
-                  '&.Mui-selected': {
-                    bgcolor: '#e3f2fd',
-                    color: '#1976d2',
-                    fontWeight: 600,
-                  },
-                  '&:hover': {
-                    bgcolor: '#f5f5f5',
-                  },
-                }}
-              >
-                <ListItemText primary={runnerOption.label} />
-              </MenuItem>
-            ))}
-          </Menu>
+          {(userRole === 'coach' || userRole === 'hybrid') && (
+            <Menu
+              anchorEl={runnerMenuAnchor}
+              open={runnerMenuOpen}
+              onClose={handleRunnerMenuClose}
+              anchorOrigin={{
+                vertical: 'bottom',
+                horizontal: 'left',
+              }}
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'left',
+              }}
+              PaperProps={{
+                sx: {
+                  mt: 1,
+                  minWidth: 200,
+                  maxHeight: 300,
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                  borderRadius: 2,
+                  border: '1px solid #e0e0e0',
+                }
+              }}
+            >
+              {runnerList.map((runnerOption) => (
+                <MenuItem
+                  key={runnerOption.value}
+                  onClick={() => handleRunnerChangeFromChip(runnerOption.value)}
+                  selected={selectedRunner === runnerOption.value}
+                  sx={{
+                    minHeight: 40,
+                    '&.Mui-selected': {
+                      bgcolor: '#e3f2fd',
+                      color: '#1976d2',
+                      fontWeight: 600,
+                    },
+                    '&:hover': {
+                      bgcolor: '#f5f5f5',
+                    },
+                  }}
+                >
+                  <ListItemText primary={runnerOption.label} />
+                </MenuItem>
+              ))}
+            </Menu>
+          )}
         </Stack>
       </Box>
 

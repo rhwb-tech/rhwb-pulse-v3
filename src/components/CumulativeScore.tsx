@@ -60,7 +60,7 @@ const CumulativeScore: React.FC<CumulativeScoreProps> = ({ score, target = 5 }) 
           needleColor={theme.palette.primary.main}
           textColor={theme.palette.text.primary}
           valueTextFontSize={fontSize}
-          currentValueText="${value}"
+          currentValueText={String(numericScore)}
           height={gaugeHeight}
           width={gaugeWidth}
           customSegmentLabels={[
