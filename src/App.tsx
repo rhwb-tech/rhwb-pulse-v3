@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Alert, Typography, Box, Grid, Chip, Stack, Skeleton, MenuItem, Menu, ListItemText, useMediaQuery, TextField } from '@mui/material';
+import { Alert, Typography, Box, Grid, Chip, Stack, Skeleton, MenuItem, Menu, ListItemText, TextField } from '@mui/material';
 import QuantitativeScores, { QuantitativeScoreData } from './components/QuantitativeScores';
-import QuantitativeScoresMobile, { QuantitativeScoreMobileData } from './components/QuantitativeScoresMobile';
+// import QuantitativeScoresMobile, { QuantitativeScoreMobileData } from './components/QuantitativeScoresMobile';
+// import ActiveMinutes, { ActiveMinutesData } from './components/ActiveMinutes';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { UserRole } from './components/FilterPanel';
 import { supabase } from './components/supabaseClient';
@@ -39,7 +40,8 @@ function App() {
 
   // Widget data
   const [data, setData] = useState<QuantitativeScoreData[]>([]);
-  const [qualitativeData, setQualitativeData] = useState<QuantitativeScoreMobileData[]>([]);
+  // const [qualitativeData, setQualitativeData] = useState<QuantitativeScoreMobileData[]>([]);
+  // const [activeMinutesData, setActiveMinutesData] = useState<ActiveMinutesData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +65,7 @@ function App() {
   const [showDebug, setShowDebug] = useState(false);
 
   // Responsive breakpoint for mobile detection
-  const isMobile = useMediaQuery('(max-width:768px)');
+  // const isMobile = useMediaQuery('(max-width:768px)');
 
   // Authentication is now handled by JWT context
 
@@ -92,7 +94,6 @@ function App() {
       .limit(10);
 
     if (error) {
-      console.error('Error searching runners:', error);
       return;
     }
 
@@ -105,7 +106,7 @@ function App() {
         };
       });
 
-    setSearchResults(uniqueRunners);
+    setSearchResults(uniqueRunners.sort((a: Option, b: Option) => a.label.localeCompare(b.label)));
   };
 
 
@@ -118,14 +119,12 @@ function App() {
         .select('coach')
         .eq('email_id', email)
         .then(({ data, error }) => {
-          if (error) {
-            console.error('Error fetching coach name:', error);
-          }
-          if (data && data.length > 0) {
-            setCoachName(data[0].coach);
-          } else {
-            console.warn('No coach found for email:', email);
-          }
+                  if (error) {
+          // Error fetching coach name
+        }
+                  if (data && data.length > 0) {
+          setCoachName(data[0].coach);
+        }
         });
     }
   }, [userRole, email]);
@@ -147,7 +146,7 @@ function App() {
           const seasonNo = Number(season);
           const { data: runners } = await supabase
             .rpc('fetch_runners_for_coach', { season_no_parm: seasonNo, coach_name_parm: selectedCoach });
-          setRunnerList((runners || []).map((r: any) => ({ value: r.email_id, label: r.runner_name })));
+          setRunnerList((runners || []).map((r: any) => ({ value: r.email_id, label: r.runner_name })).sort((a: Option, b: Option) => a.label.localeCompare(b.label)));
         } else {
           setRunnerList([]);
         }
@@ -155,7 +154,6 @@ function App() {
         // Coach/Hybrid: fetch runners using the new join query (a.coach)
         const coach = coachName;
         if (!coach) {
-          console.warn('Coach name not found, cannot fetch runners');
           setRunnerList([]);
           return;
         }
@@ -164,12 +162,11 @@ function App() {
           .rpc('fetch_runners_for_coach', { season_no_parm: seasonNo, coach_name_parm: coach });
         
         if (runnersError) {
-          console.error('Error fetching runners for coach:', runnersError);
           setRunnerList([]);
           return;
         }
         
-        setRunnerList((runners || []).map((r: any) => ({ value: r.email_id, label: r.runner_name })));
+        setRunnerList((runners || []).map((r: any) => ({ value: r.email_id, label: r.runner_name })).sort((a: Option, b: Option) => a.label.localeCompare(b.label)));
       } else {
         // Athlete: no runner/coach lists
         setCoachList([]);
@@ -198,7 +195,8 @@ function App() {
         query = query.eq('season', `Season ${season}`).eq('email_id', runnerEmail);
       } else {
         setData([]); 
-        setQualitativeData([]);
+        // setQualitativeData([]);
+        // setActiveMinutesData([]);
         setLoading(false); 
         return;
       }
@@ -207,7 +205,8 @@ function App() {
         query = query.eq('season', `Season ${season}`).eq('email_id', runnerEmail);
       } else {
         setData([]); 
-        setQualitativeData([]);
+        // setQualitativeData([]);
+        // setActiveMinutesData([]);
         setLoading(false); 
         return;
       }
@@ -217,7 +216,8 @@ function App() {
           query = query.eq('season', `Season ${season}`).eq('email_id', runnerEmail);
         } else {
           setData([]); 
-          setQualitativeData([]);
+          // setQualitativeData([]);
+          // setActiveMinutesData([]);
           setLoading(false); 
           return;
         }
@@ -246,15 +246,69 @@ function App() {
     }));
     
     // Format same data for qualitative chart (horizontal bars) - using same data but different display
-    const formattedQual: QuantitativeScoreMobileData[] = (rows || []).map((row: any) => ({
-      meso: row.meso,
-      personal: row.quant_personal, // Using same data for now
-      coach: row.quant_coach,       // Using same data for now
-      raceDistance: row.quant_race_distance, // Using same data for now
-    }));
+    // const formattedQual: QuantitativeScoreMobileData[] = (rows || []).map((row: any) => ({
+    //   meso: row.meso,
+    //   personal: row.quant_personal, // Using same data for now
+    //   coach: row.quant_coach,       // Using same data for now
+    //   raceDistance: row.quant_race_distance, // Using same data for now
+    // }));
     
     setData(formattedQuant);
-    setQualitativeData(formattedQual);
+    // setQualitativeData(formattedQual);
+    
+    // Fetch active minutes data - commented out since widget is hidden
+    // let activeMinutesQuery = supabase
+    //   .from('rhwb_activities_summary')
+    //   .select('meso, workout_date, activity, completed_time_in_mins');
+    
+    // if (userRole === 'admin') {
+    //   if (runnerEmail) {
+    //     activeMinutesQuery = activeMinutesQuery.eq('email_id', runnerEmail);
+    //   } else {
+    //     setActiveMinutesData([]);
+    //     setLoading(false);
+    //     return;
+    //   }
+    // } else if (userRole === 'coach') {
+    //   if (runnerEmail) {
+    //     activeMinutesQuery = activeMinutesQuery.eq('email_id', runnerEmail);
+    //   } else {
+    //     setActiveMinutesData([]);
+    //     setLoading(false);
+    //     return;
+    //   }
+    // } else if (userRole === 'hybrid') {
+    //   if (hybridToggle === 'myCohorts') {
+    //     if (runnerEmail) {
+    //       activeMinutesQuery = activeMinutesQuery.eq('email_id', runnerEmail);
+    //     } else {
+    //       setActiveMinutesData([]);
+    //       setLoading(false);
+    //       return;
+    //     }
+    //   } else {
+    //     activeMinutesQuery = activeMinutesQuery.eq('email_id', email);
+    //   }
+    // } else {
+    //   // athlete
+    //   activeMinutesQuery = activeMinutesQuery.eq('email_id', email);
+    // }
+    
+    // const { data: activeMinutesRows, error: activeMinutesError } = await activeMinutesQuery;
+    
+    // if (activeMinutesError) {
+    //   console.error('Error fetching active minutes data:', activeMinutesError);
+    //   setActiveMinutesData([]);
+    // } else {
+    //   const formattedActiveMinutes: ActiveMinutesData[] = (activeMinutesRows || []).map((row: any) => ({
+    //     meso: row.meso,
+    //     workout_date: row.workout_date,
+    //     activity: row.activity,
+    //     completed_time_in_mins: row.completed_time_in_mins,
+    //   }));
+    //   setActiveMinutesData(formattedActiveMinutes);
+    // }
+    
     setLoading(false);
   }, [season, email, userRole, hybridToggle]);
 
@@ -424,10 +478,10 @@ function App() {
           });
         
         if (error) {
-          console.error('Error logging hybrid toggle interaction:', error);
+          // Error logging hybrid toggle interaction
         }
       } catch (err) {
-        console.error('Error logging hybrid toggle interaction:', err);
+        // Error logging hybrid toggle interaction
       }
     }
   };
@@ -616,12 +670,10 @@ function App() {
             });
           
           if (error) {
-            console.error('Error logging app access:', error);
-          } else {
-            console.log('App access logged successfully');
+            // Error logging app access
           }
         } catch (err) {
-          console.error('Error logging app access:', err);
+          // Error logging app access
         }
       }
     };
@@ -958,8 +1010,23 @@ function App() {
         {/* Widgets Grid */}
         {loading ? (
           <Grid container spacing={{ xs: 1, sm: 2, md: 4 }} sx={{ mt: { xs: 0, sm: 1 } }}>
-            {/* Top row skeleton */}
-            <Grid item xs={12}>
+            {/* Top row skeletons - side by side on desktop */}
+            <Grid item xs={12} md={6}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
+                borderRadius: 2, 
+                bgcolor: 'white', 
+                p: 2, 
+                height: 350,
+                overflow: 'hidden',
+                boxShadow: 1
+              }}>
+                <Skeleton variant="text" width="40%" height={32} />
+                <Skeleton variant="rectangular" width="100%" height={280} sx={{ mt: 2 }} />
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
               <Box sx={{ 
                 width: '100%', 
                 borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
@@ -1014,8 +1081,21 @@ function App() {
           <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>
         ) : (
           <Grid container spacing={{ xs: 1, sm: 2, md: 4 }} sx={{ mt: { xs: 0, sm: 1 } }}>
-            {/* Top row - Full width chart */}
+            {/* Top row - Quantitative Scores (full width since Active Minutes is hidden) */}
             <Grid item xs={12}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
+                borderRadius: 2, 
+                bgcolor: 'white',
+                overflow: 'hidden',
+                boxShadow: 1,
+                display: 'block'
+              }}>
+                <QuantitativeScores data={data} />
+              </Box>
+            </Grid>
+            {/* <Grid item xs={12} md={6}>
               <Box sx={{ 
                 width: '100%', 
                 borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
@@ -1025,11 +1105,11 @@ function App() {
                 boxShadow: 1,
                 display: isMobile ? 'none' : 'block'
               }}>
-                <QuantitativeScores data={data} />
+                <ActiveMinutes data={activeMinutesData} />
               </Box>
-            </Grid>
+            </Grid> */}
             {/* Mobile Quantitative Score - Full width vertical chart */}
-            <Grid item xs={12}>
+            {/* <Grid item xs={12}>
               <Box sx={{ 
                 width: '100%', 
                 borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
@@ -1041,7 +1121,21 @@ function App() {
               }}>
                 <QuantitativeScoresMobile data={qualitativeData} />
               </Box>
-            </Grid>
+            </Grid> */}
+            {/* Mobile Active Minutes - Full width */}
+            {/* <Grid item xs={12}>
+              <Box sx={{ 
+                width: '100%', 
+                borderLeft: { xs: 'none', sm: '4px solid #1976d2' }, 
+                borderRadius: 2, 
+                bgcolor: 'white',
+                overflow: 'hidden',
+                boxShadow: 1,
+                display: isMobile ? 'block' : 'none'
+              }}>
+                <ActiveMinutes data={activeMinutesData} />
+              </Box>
+            </Grid> */}
             {/* Bottom row - Side by side on md+ */}
             <Grid item xs={12} md={6}>
               <Box sx={{ 
@@ -1151,6 +1245,17 @@ AND category = 'Personal'
                   <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
 SELECT category, percent_completed, planned, completed FROM v_activity_summary 
 WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Active Minutes:</strong>
+                </Typography>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT meso, workout_date, activity, sum(completed_time_in_mins) FROM rhwb_activities_summary 
+WHERE email_id = '{selectedRunner || email}'
+GROUP BY meso, workout_date, activity
                   </Typography>
                 </Box>
                 

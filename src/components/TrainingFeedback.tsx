@@ -20,7 +20,6 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
 
   const handleIconClick = async (eventName: string, valueText: string, iconId: string, mesoCycle: string) => {
     if (!currentEmail) {
-      console.error('No email available for interaction logging');
       return;
     }
 
@@ -57,7 +56,7 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
           .eq('value_label', mesoCycle);
         
         if (error) {
-          console.error('Error deleting training feedback interaction:', error);
+          // Error deleting training feedback interaction
         } else {
           // Log the removal action
           await supabase
@@ -91,7 +90,7 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
           });
         
         if (error) {
-          console.error('Error logging training feedback interaction:', error);
+          // Error logging training feedback interaction
         } else {
           // Update local interactions state
           setInteractions(prev => ({
@@ -105,7 +104,7 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
         }
       }
     } catch (err) {
-      console.error('Error handling training feedback interaction:', err);
+      // Error handling training feedback interaction
     }
   };
 
