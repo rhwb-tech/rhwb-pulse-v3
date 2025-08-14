@@ -44,7 +44,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   onCoachChange,
   selectedRunner = '',
   onRunnerChange,
-  hybridToggle = 'myScore',
+  hybridToggle = 'myCohorts',
   onHybridToggle,
   email,
   onEmailChange,

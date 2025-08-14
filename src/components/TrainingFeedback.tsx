@@ -7,7 +7,7 @@ import { supabase } from './supabaseClient';
 interface TrainingFeedbackProps {
   feedback: Array<{meso: string, qual: string}>;
   userEmail?: string;
-  emailId?: string; // Add email_id from rhwb_meso_scores
+  emailId?: string; // Add email_id from v_rhwb_meso_scores
 }
 
 const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail, emailId }) => {
@@ -15,7 +15,7 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
   const [interactions, setInteractions] = React.useState<{[key: string]: {acknowledge: boolean, love: boolean}}>({});
   const isMobile = window.innerWidth <= 768;
 
-  // Use emailId from rhwb_meso_scores if available, otherwise fall back to userEmail
+  // Use emailId from v_rhwb_meso_scores if available, otherwise fall back to userEmail
   const currentEmail = emailId || userEmail;
 
   const handleIconClick = async (eventName: string, valueText: string, iconId: string, mesoCycle: string) => {

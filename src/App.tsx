@@ -33,7 +33,7 @@ function App() {
   const [runnerList, setRunnerList] = useState<Option[]>([]);
   const [selectedCoach, setSelectedCoach] = useState('');
   const [selectedRunner, setSelectedRunner] = useState('');
-  const [hybridToggle, setHybridToggle] = useState<'myScore' | 'myCohorts'>('myScore');
+  const [hybridToggle, setHybridToggle] = useState<'myScore' | 'myCohorts'>('myCohorts');
   const [coachName, setCoachName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Option[]>([]);
@@ -52,6 +52,10 @@ function App() {
   const [seasonMenuAnchor, setSeasonMenuAnchor] = useState<null | HTMLElement>(null);
   const seasonMenuOpen = Boolean(seasonMenuAnchor);
   const [seasonOptions, setSeasonOptions] = useState<Option[]>([]);
+  
+  // Coach dropdown state
+  const [coachMenuAnchor, setCoachMenuAnchor] = useState<null | HTMLElement>(null);
+  const coachMenuOpen = Boolean(coachMenuAnchor);
   
   // Runner dropdown state
   const [runnerMenuAnchor, setRunnerMenuAnchor] = useState<null | HTMLElement>(null);
@@ -88,7 +92,7 @@ function App() {
     }
 
     const { data: runners, error } = await supabase
-      .from('rhwb_meso_scores')
+      .from('v_rhwb_meso_scores')
       .select('email_id, full_name')
       .or(`email_id.ilike.%${query}%,full_name.ilike.%${query}%`)
       .limit(10);
@@ -178,7 +182,10 @@ function App() {
 
   // Fetch widget data (QuantitativeScores) on Apply
   const fetchWidgetData = useCallback(async () => {
-    await fetchWidgetDataForRunner(selectedRunner);
+    // Only fetch if we have a valid selectedRunner (for non-athlete roles)
+    if (userRole === 'athlete' || selectedRunner) {
+      await fetchWidgetDataForRunner(selectedRunner || email);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [season, email, userRole, selectedRunner, hybridToggle]);
 
@@ -315,26 +322,43 @@ function App() {
   // On initial app load or when email changes from URL, fetch Quantitative Scores
   useEffect(() => {
     if (email && userRole && initialLoad) {
-      fetchWidgetData();
+      // Only fetch data immediately for athletes, others wait for runner selection
+      if (userRole === 'athlete') {
+        fetchWidgetData();
+      }
       setInitialLoad(false);
     }
     // eslint-disable-next-line
-  }, [email, userRole]);
+  }, [email, userRole, initialLoad]);
+
+  // Handle initial load for hybrid users who start with 'myCohorts'
+  useEffect(() => {
+    if (userRole === 'hybrid' && hybridToggle === 'myCohorts' && runnerList.length > 0 && !selectedRunner && !initialLoad) {
+      setSelectedRunner(runnerList[0].value);
+    }
+    // eslint-disable-next-line
+  }, [userRole, runnerList, initialLoad, hybridToggle]);
+
+  // When selectedRunner changes, fetch widget data
+  useEffect(() => {
+    if (selectedRunner || userRole === 'athlete') {
+      fetchWidgetData();
+    }
+    // eslint-disable-next-line
+  }, [selectedRunner, userRole]);
 
   // When hybrid user selects 'My Score', clear runner selection and filter widget data for logged-in user
   useEffect(() => {
     if (userRole === 'hybrid' && hybridToggle === 'myScore') {
       setSelectedRunner('');
-      setTimeout(() => handleApply(), 0);
     }
     // eslint-disable-next-line
   }, [hybridToggle]);
 
   // When hybrid user selects 'My Cohorts', select the first runner and filter widget data
   useEffect(() => {
-    if (userRole === 'hybrid' && hybridToggle === 'myCohorts' && runnerList.length > 0) {
+    if (userRole === 'hybrid' && hybridToggle === 'myCohorts' && runnerList.length > 0 && !selectedRunner) {
       setSelectedRunner(runnerList[0].value);
-      setTimeout(() => handleApply(), 0);
     }
     // eslint-disable-next-line
   }, [hybridToggle, runnerList]);
@@ -343,10 +367,9 @@ function App() {
   useEffect(() => {
     if (userRole === 'coach' && runnerList.length > 0 && !selectedRunner) {
       setSelectedRunner(runnerList[0].value);
-      setTimeout(() => handleApply(), 0);
     }
     // eslint-disable-next-line
-  }, [userRole, runnerList, selectedRunner]);
+  }, [userRole, runnerList]);
 
   // When admin selects a coach, auto-select the first runner for that coach
   useEffect(() => {
@@ -355,6 +378,26 @@ function App() {
     }
     // eslint-disable-next-line
   }, [userRole, selectedCoach, runnerList]);
+
+  // When season changes and hybrid user is in 'myCohorts' mode, auto-select first runner
+  useEffect(() => {
+    if (userRole === 'hybrid' && hybridToggle === 'myCohorts' && runnerList.length > 0 && !selectedRunner) {
+      setSelectedRunner(runnerList[0].value);
+    }
+    // eslint-disable-next-line
+  }, [season, userRole, hybridToggle, runnerList, selectedRunner]);
+
+  // Ensure hybrid users in 'myCohorts' mode always have a runner from their list selected
+  useEffect(() => {
+    if (userRole === 'hybrid' && hybridToggle === 'myCohorts' && runnerList.length > 0) {
+      // Check if selectedRunner is not in the runnerList (i.e., it's the coach's email)
+      const isRunnerInList = runnerList.some(runner => runner.value === selectedRunner);
+      if (!isRunnerInList) {
+        setSelectedRunner(runnerList[0].value);
+      }
+    }
+    // eslint-disable-next-line
+  }, [userRole, hybridToggle, runnerList, selectedRunner]);
 
   // Handle Apply
   const handleApply = () => {
@@ -366,7 +409,7 @@ function App() {
     setSeason(DEFAULT_SEASON);
     setSelectedCoach('');
     setSelectedRunner('');
-    setHybridToggle('myScore');
+    setHybridToggle('myCohorts');
     setData([]);
     // Email and role come from JWT, no need to reset
   };
@@ -389,6 +432,29 @@ function App() {
   const handleRunnerChange = (runner: string) => {
     setSelectedRunner(runner);
     setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+  };
+
+  // Coach dropdown handlers
+  const handleCoachMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setCoachMenuAnchor(event.currentTarget);
+  };
+
+  const handleCoachMenuClose = () => {
+    setCoachMenuAnchor(null);
+  };
+
+  const handleCoachChangeFromChip = (newCoach: string) => {
+    setSelectedCoach(newCoach);
+    setCoachMenuAnchor(null);
+    setTimeout(() => {
+      if (runnerList.length > 0) {
+        setSelectedRunner(runnerList[0].value);
+        setTimeout(() => handleApply(), 0);
+      } else {
+        setSelectedRunner('');
+        handleApply();
+      }
+    }, 0);
   };
 
   // Season dropdown handlers
@@ -528,7 +594,7 @@ function App() {
     }
     // Fetch all personal scores for this runner and season
     const { data: rows, error } = await supabase
-      .from('rhwb_meso_scores')
+      .from('v_rhwb_meso_scores')
       .select('email_id, season, meso, cumulative_score')
       .eq('email_id', runnerEmail)
       .eq('season', `Season ${season}`)
@@ -613,7 +679,7 @@ function App() {
     }
     // Fetch training feedback for this runner and season
     const { data: rows, error } = await supabase
-      .from('rhwb_meso_scores')
+      .from('v_rhwb_meso_scores')
       .select('meso, qual')
       .eq('season', `Season ${season}`)
       .eq('email_id', runnerEmail)
@@ -856,10 +922,59 @@ function App() {
               ))}
             </Menu>
             
+            {/* Coach menu for admin users */}
+            {userRole === 'admin' && (
+              <Menu
+                anchorEl={coachMenuAnchor}
+                open={coachMenuOpen}
+                onClose={handleCoachMenuClose}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'left',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+                PaperProps={{
+                  sx: {
+                    mt: 1,
+                    minWidth: 200,
+                    maxHeight: 300,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                    borderRadius: 2,
+                    border: '1px solid #e0e0e0',
+                  }
+                }}
+              >
+                {coachList.map((coachOption) => (
+                  <MenuItem
+                    key={coachOption.value}
+                    onClick={() => handleCoachChangeFromChip(coachOption.value)}
+                    selected={selectedCoach === coachOption.value}
+                    sx={{
+                      minHeight: 40,
+                      '&.Mui-selected': {
+                        bgcolor: '#e3f2fd',
+                        color: '#1976d2',
+                        fontWeight: 600,
+                      },
+                      '&:hover': {
+                        bgcolor: '#f5f5f5',
+                      },
+                    }}
+                  >
+                    <ListItemText primary={coachOption.label} />
+                  </MenuItem>
+                ))}
+              </Menu>
+            )}
+            
             {/* Show coach chip for admin if selected */}
             {userRole === 'admin' && selectedCoach && (
               <Chip
                 label={selectedCoach}
+                onClick={handleCoachMenuOpen}
                 sx={{
                   bgcolor: '#e3f2fd',
                   color: '#1976d2',
@@ -870,6 +985,35 @@ function App() {
                   py: 1,
                   minWidth: 'fit-content',
                   whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: '#bbdefb',
+                  },
+                }}
+              />
+            )}
+            
+            {/* Show coach selection chip for admin if no coach selected */}
+            {userRole === 'admin' && !selectedCoach && coachList.length > 0 && (
+              <Chip
+                label="Select Coach"
+                onClick={handleCoachMenuOpen}
+                sx={{
+                  bgcolor: '#f5f5f5',
+                  color: '#666',
+                  fontWeight: 600,
+                  fontSize: { xs: 14, sm: 16, md: 18 },
+                  borderRadius: 999,
+                  px: 2,
+                  py: 1,
+                  minWidth: 'fit-content',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  border: '2px dashed #ccc',
+                  '&:hover': {
+                    bgcolor: '#e0e0e0',
+                    borderColor: '#999',
+                  },
                 }}
               />
             )}
@@ -934,7 +1078,7 @@ function App() {
           </Stack>
           
           {/* Second Row - Runner Chip (Mobile) or Same Row (Desktop) */}
-          {selectedRunner && (userRole === 'coach' || userRole === 'hybrid') && (
+          {selectedRunner && (userRole === 'admin' || userRole === 'coach' || userRole === 'hybrid') && (
             <Chip
               label={runnerList.find(r => r.value === selectedRunner)?.label || selectedRunner}
               onClick={handleRunnerMenuOpen}
@@ -955,7 +1099,7 @@ function App() {
               }}
             />
           )}
-          {(userRole === 'coach' || userRole === 'hybrid') && (
+          {(userRole === 'admin' || userRole === 'coach' || userRole === 'hybrid') && (
             <Menu
               anchorEl={runnerMenuAnchor}
               open={runnerMenuOpen}
@@ -1199,6 +1343,9 @@ function App() {
                 <Typography variant="body2">User Role: {userRole}</Typography>
                 {selectedCoach && <Typography variant="body2">Coach: {selectedCoach}</Typography>}
                 {userRole === 'hybrid' && <Typography variant="body2">Hybrid Toggle: {hybridToggle}</Typography>}
+                <Typography variant="body2">Data Length: {data.length}</Typography>
+                <Typography variant="body2">Loading: {loading ? 'true' : 'false'}</Typography>
+                <Typography variant="body2">Error: {error || 'none'}</Typography>
               </Box>
               
               <Typography variant="body2" sx={{ mb: 1 }}>
@@ -1206,7 +1353,18 @@ function App() {
               </Typography>
               <Box sx={{ ml: 2 }}>
                 <Typography variant="body2" sx={{ mb: 1 }}>
-                  <strong>Quantitative Scores:</strong>
+                  <strong>Quantitative Scores (v_quantitative_scores view):</strong>
+                </Typography>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT meso, quant_coach, quant_personal, quant_race_distance 
+FROM v_quantitative_scores 
+WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Quantitative Scores (direct table query):</strong>
                 </Typography>
                 <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
                   <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
@@ -1218,24 +1376,24 @@ function App() {
                   <strong>Training Feedback:</strong>
                 </Typography>
                 <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
-                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-SELECT meso, qual FROM rhwb_meso_scores 
+                                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT meso, qual FROM v_rhwb_meso_scores 
 WHERE season = 'Season {season}' AND email_id = '{selectedRunner || email}'
 AND category = 'Personal' AND qual IS NOT NULL
 ORDER BY CAST(REPLACE(meso, 'Meso ', '') AS INTEGER) DESC
-                  </Typography>
+                </Typography>
                 </Box>
                 
                 <Typography variant="body2" sx={{ mb: 1 }}>
                   <strong>Cumulative Score:</strong>
                 </Typography>
                 <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
-                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-SELECT email_id, season, meso, cumulative_score FROM rhwb_meso_scores 
+                                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+SELECT email_id, season, meso, cumulative_score FROM v_rhwb_meso_scores 
 WHERE email_id = '{selectedRunner || email}' 
 AND season = 'Season {season}' 
 AND category = 'Personal'
-                  </Typography>
+                </Typography>
                 </Box>
                 
                 <Typography variant="body2" sx={{ mb: 1 }}>
@@ -1267,6 +1425,15 @@ GROUP BY meso, workout_date, activity
 SELECT value_text, value_label FROM pulse_interactions 
 WHERE email_id = '{selectedRunner || email}' 
 AND event_name = 'training feedback'
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Chart Data (formattedQuant):</strong>
+                </Typography>
+                <Box sx={{ ml: 2, mb: 2, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #ccc' }}>
+                  <Typography variant="body2" component="pre" sx={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+{JSON.stringify(data, null, 2)}
                   </Typography>
                 </Box>
               </Box>
