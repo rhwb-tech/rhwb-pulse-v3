@@ -82,6 +82,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
               We've sent a magic link to <strong>{email}</strong>. 
               Click the link in your email to sign in.
             </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '0.875rem' }}>
+              If you have trouble connecting, restart your browser session and try. If you are still having trouble please send an email to{' '}
+              <a 
+                href="mailto:techteamrhwb@gmail.com"
+                style={{ color: '#1976d2', textDecoration: 'underline' }}
+              >
+                techteamrhwb@gmail.com
+              </a>
+            </Typography>
             <Button 
               variant="outlined" 
               onClick={clearEmailSent}

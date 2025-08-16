@@ -48,6 +48,17 @@ function App() {
   // Track if initial load has occurred
   const [initialLoad, setInitialLoad] = useState(true);
   
+  // Add a timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading && email) {
+        setLoading(false);
+      }
+    }, 10000); // 10 second timeout
+    
+    return () => clearTimeout(timeout);
+  }, [loading, email]);
+  
   // Season dropdown state
   const [seasonMenuAnchor, setSeasonMenuAnchor] = useState<null | HTMLElement>(null);
   const seasonMenuOpen = Boolean(seasonMenuAnchor);
@@ -328,8 +339,15 @@ function App() {
       }
       setInitialLoad(false);
     }
+    // Ensure loading is set to false if we have user info but no data fetching is needed
+    if (email && userRole && !initialLoad && loading) {
+      // For non-athlete users, if we have user info but no runner selected, still stop loading
+      if (userRole !== 'athlete' && !selectedRunner) {
+        setLoading(false);
+      }
+    }
     // eslint-disable-next-line
-  }, [email, userRole, initialLoad]);
+  }, [email, userRole, initialLoad, loading, selectedRunner]);
 
   // Handle initial load for hybrid users who start with 'myCohorts'
   useEffect(() => {

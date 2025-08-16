@@ -282,6 +282,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+
+
   const logout = async (): Promise<void> => {
     try {
       const { error } = await supabase.auth.signOut();
