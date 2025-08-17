@@ -261,11 +261,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { success: false, error: validation.error || 'Email address not authorized' };
       }
 
-      // If email is valid, send magic link
+      // If email is valid, send OTP
       const { error } = await supabase.auth.signInWithOtp({
         email: email.toLowerCase(),
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+          data: {
+            app: 'RHWB Pulse',
+            app_domain: window.location.hostname,
+            auth_method: 'otp'
+          }
         }
       });
 

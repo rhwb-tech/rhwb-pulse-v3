@@ -7,6 +7,30 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storageKey: 'rhwb-pulse-auth', // App-specific storage key
+    storage: {
+      getItem: (key) => {
+        try {
+          return localStorage.getItem(`rhwb-pulse-${key}`);
+        } catch {
+          return null;
+        }
+      },
+      setItem: (key, value) => {
+        try {
+          localStorage.setItem(`rhwb-pulse-${key}`, value);
+        } catch {
+          // Handle storage errors
+        }
+      },
+      removeItem: (key) => {
+        try {
+          localStorage.removeItem(`rhwb-pulse-${key}`);
+        } catch {
+          // Handle storage errors
+        }
+      }
+    }
   }
 }); 
