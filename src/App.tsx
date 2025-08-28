@@ -330,6 +330,67 @@ function App() {
     setLoading(false);
   }, [season, email, userRole, hybridToggle]);
 
+  // Fetch widget data for a specific runner with explicit season parameter
+  const fetchWidgetDataForRunnerWithSeason = async (runnerEmail: string, seasonValue: string) => {
+    setLoading(true);
+    setError(null);
+    
+    // Fetch quantitative data (use same view for both charts)
+    let query = supabase.from('v_quantitative_scores').select('meso, quant_coach, quant_personal, quant_race_distance');
+    
+    if (userRole === 'admin') {
+      if (runnerEmail) {
+        query = query.eq('season', `Season ${seasonValue}`).eq('email_id', runnerEmail);
+      } else {
+        setData([]); 
+        setLoading(false); 
+        return;
+      }
+    } else if (userRole === 'coach') {
+      if (runnerEmail) {
+        query = query.eq('season', `Season ${seasonValue}`).eq('email_id', runnerEmail);
+      } else {
+        setData([]); 
+        setLoading(false); 
+        return;
+      }
+    } else if (userRole === 'hybrid') {
+      if (hybridToggle === 'myCohorts') {
+        if (runnerEmail) {
+          query = query.eq('season', `Season ${seasonValue}`).eq('email_id', runnerEmail);
+        } else {
+          setData([]); 
+          setLoading(false); 
+          return;
+        }
+      } else {
+        query = query.eq('season', `Season ${seasonValue}`).eq('email_id', email);
+      }
+    } else {
+      // athlete
+      query = query.eq('season', `Season ${seasonValue}`).eq('email_id', email);
+    }
+    
+    const { data: rows, error } = await query;
+    
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+    
+    // Format data for quantitative chart (vertical bars)
+    const formattedQuant: QuantitativeScoreData[] = (rows || []).map((row: any) => ({
+      meso: row.meso,
+      personal: row.quant_personal,
+      coach: row.quant_coach,
+      raceDistance: row.quant_race_distance,
+    }));
+    
+    setData(formattedQuant);
+    setLoading(false);
+  };
+
   // On initial app load or when email changes from URL, fetch Quantitative Scores
   useEffect(() => {
     if (email && userRole && initialLoad) {
@@ -429,6 +490,12 @@ function App() {
     setSelectedRunner('');
     setHybridToggle('myCohorts');
     setData([]);
+    setCumulativeScore(null);
+    setActivitySummary({
+      mileage: { percent: null, planned: null, completed: null },
+      strength: { percent: null, planned: null, completed: null }
+    });
+    setTrainingFeedback([]);
     // Email and role come from JWT, no need to reset
   };
 
@@ -487,7 +554,20 @@ function App() {
   const handleSeasonChange = (newSeason: string) => {
     setSeason(newSeason);
     setSeasonMenuAnchor(null);
-    setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+    // Clear all data immediately to prevent showing stale data
+    setData([]);
+    setCumulativeScore(null);
+    setActivitySummary({
+      mileage: { percent: null, planned: null, completed: null },
+      strength: { percent: null, planned: null, completed: null }
+    });
+    setTrainingFeedback([]);
+    setLoading(true);
+    // Fetch data directly with the new season value to avoid stale closure
+    const runnerEmail = selectedRunner || email;
+    if (userRole === 'athlete' || runnerEmail) {
+      fetchWidgetDataForRunnerWithSeason(runnerEmail, newSeason);
+    }
   };
 
   // Runner dropdown handlers
@@ -502,6 +582,9 @@ function App() {
   const handleRunnerChangeFromChip = (newRunner: string) => {
     setSelectedRunner(newRunner);
     setRunnerMenuAnchor(null);
+    // Clear data immediately to prevent showing stale data
+    setData([]);
+    setLoading(true);
     // Use the newRunner value directly instead of relying on state update
     setTimeout(() => {
       // Pass the new runner value directly to avoid stale state
