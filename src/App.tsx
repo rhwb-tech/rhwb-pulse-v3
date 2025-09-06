@@ -620,14 +620,30 @@ function App() {
     setHybridToggle(newToggle);
     setHybridToggleMenuAnchor(null);
     
+    // Clear all data immediately to prevent showing stale data
+    setData([]);
+    setCumulativeScore(null);
+    setActivitySummary({
+      mileage: { percent: null, planned: null, completed: null },
+      strength: { percent: null, planned: null, completed: null }
+    });
+    setTrainingFeedback([]);
+    setLoading(true);
+    
     // If switching to 'myCohorts' and we have runners, select the first one
     if (newToggle === 'myCohorts' && runnerList.length > 0) {
       setSelectedRunner(runnerList[0].value);
-      setTimeout(() => handleApply(), 0); // Ensure state is updated before applying
+      setTimeout(() => {
+        // Fetch data for the first runner
+        fetchWidgetDataForRunner(runnerList[0].value);
+      }, 0);
     } else if (newToggle === 'myScore') {
       // Clear selected runner when switching to 'myScore'
       setSelectedRunner('');
-      setTimeout(() => handleApply(), 0);
+      setTimeout(() => {
+        // Fetch data for the logged-in user
+        fetchWidgetDataForRunner(email);
+      }, 0);
     } else {
       setTimeout(() => handleApply(), 0);
     }
