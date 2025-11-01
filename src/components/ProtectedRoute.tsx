@@ -68,7 +68,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       // Fetch runner season info
       const { data: seasonData, error: seasonError } = await supabase
         .from('runner_season_info')
-        .select('race_timings, race_distance_completed, coach')
+        .select('race_timings, race_distance_completed, coach, race_pr')
         .eq('email_id', userEmail.toLowerCase())
         .eq('season', 'Season 14')
         .single();
@@ -85,6 +85,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         race: seasonData?.race_distance_completed || 'Half Marathon',
         time: seasonData?.race_timings || 'Completed',
         coach: seasonData?.coach || 'RHWB Training Team',
+        race_pr: seasonData?.race_pr || false,
         date: new Date().toLocaleDateString()
       };
       
@@ -101,6 +102,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         race: 'Half Marathon',
         time: 'Completed',
         coach: 'RHWB Training Team',
+        race_pr: false,
         date: new Date().toLocaleDateString()
       };
       setRunnerData(fallbackData);
