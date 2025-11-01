@@ -82,9 +82,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       const combinedRunnerData = {
         id: userEmail,
         name: profileData?.runner_name || user?.name || userEmail.split('@')[0] || 'Runner',
-        race: seasonData?.race_distance_completed || 'Half Marathon',
+        race: seasonData?.race_distance_completed || null, // Leave blank if not available
         time: seasonData?.race_timings || null, // Keep null if not available
-        coach: seasonData?.coach || 'RHWB Training Team',
+        coach: seasonData?.coach || null, // Leave blank if not available
         race_pr: seasonData?.race_pr || false,
         date: new Date().toLocaleDateString()
       };
@@ -99,9 +99,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       const fallbackData = {
         id: user?.email || 'unknown',
         name: user?.name || user?.email?.split('@')[0] || 'Runner',
-        race: 'Half Marathon',
+        race: null, // Leave blank if not available
         time: null, // Set to null to show informational message
-        coach: 'RHWB Training Team',
+        coach: null, // Leave blank if not available
         race_pr: false,
         date: new Date().toLocaleDateString()
       };
