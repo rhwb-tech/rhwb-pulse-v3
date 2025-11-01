@@ -1,9 +1,12 @@
 import React from 'react';
-import { Box, CircularProgress, Typography, Alert, Button, TextField } from '@mui/material';
+import { Box, CircularProgress, Typography, Alert, Button, TextField, IconButton, Menu, MenuItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
 import { Key } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { getAppConfig } from '../config/appConfig';
 import AuthOTPVerification from './AuthOTPVerification';
+import CertificateGenerator from '../CertificateGeneratorSimple';
+import { supabase } from './supabaseClient';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -16,6 +19,102 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   // Remove authMethod state since we only have OTP now
   const [showOTPVerification, setShowOTPVerification] = React.useState(false);
   const appConfig = getAppConfig();
+
+  // Hamburger menu state (moved to header)
+  const [hamburgerMenuAnchor, setHamburgerMenuAnchor] = React.useState<null | HTMLElement>(null);
+  const hamburgerMenuOpen = Boolean(hamburgerMenuAnchor);
+  const handleHamburgerMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setHamburgerMenuAnchor(event.currentTarget);
+  };
+  const handleHamburgerMenuClose = () => {
+    setHamburgerMenuAnchor(null);
+  };
+  
+  // Certificate dialog state
+  const [certificateDialogOpen, setCertificateDialogOpen] = React.useState(false);
+  const [runnerData, setRunnerData] = React.useState<any>(null);
+  const [loadingRunnerData, setLoadingRunnerData] = React.useState(false);
+  
+  const handleCertificatesClick = () => {
+    // Placeholder: wire up navigation/action here
+    // e.g., navigate('/certificates')
+    setHamburgerMenuAnchor(null);
+  };
+  const handleSeason14Click = async () => {
+    console.log("Season 14 clicked, opening certificate dialog");
+    console.log("User data:", user);
+    
+    // Fetch runner data from database
+    setLoadingRunnerData(true);
+    try {
+      const userEmail = user?.email;
+      if (!userEmail) {
+        console.error('No user email available');
+        return;
+      }
+      
+      // Fetch runner profile data
+      const { data: profileData, error: profileError } = await supabase
+        .from('runners_profile')
+        .select('runner_name')
+        .eq('email_id', userEmail.toLowerCase())
+        .single();
+      
+      if (profileError) {
+        console.error('Error fetching runner profile:', profileError);
+        throw profileError;
+      }
+      
+      // Fetch runner season info
+      const { data: seasonData, error: seasonError } = await supabase
+        .from('runner_season_info')
+        .select('race_timings, race_distance_completed, coach')
+        .eq('email_id', userEmail.toLowerCase())
+        .eq('season', 'Season 14')
+        .single();
+      
+      if (seasonError) {
+        console.error('Error fetching season info:', seasonError);
+        throw seasonError;
+      }
+      
+      // Combine the data
+      const combinedRunnerData = {
+        id: userEmail,
+        name: profileData?.runner_name || user?.name || userEmail.split('@')[0] || 'Runner',
+        race: seasonData?.race_distance_completed || 'Half Marathon',
+        time: seasonData?.race_timings || 'Completed',
+        coach: seasonData?.coach || 'RHWB Training Team',
+        date: new Date().toLocaleDateString()
+      };
+      
+      console.log('Fetched runner data:', combinedRunnerData);
+      setRunnerData(combinedRunnerData);
+      setCertificateDialogOpen(true);
+      
+    } catch (error) {
+      console.error('Error fetching runner data:', error);
+      // Fallback to basic data if database fetch fails
+      const fallbackData = {
+        id: user?.email || 'unknown',
+        name: user?.name || user?.email?.split('@')[0] || 'Runner',
+        race: 'Half Marathon',
+        time: 'Completed',
+        coach: 'RHWB Training Team',
+        date: new Date().toLocaleDateString()
+      };
+      setRunnerData(fallbackData);
+      setCertificateDialogOpen(true);
+    } finally {
+      setLoadingRunnerData(false);
+    }
+    
+    setHamburgerMenuAnchor(null);
+  };
+  
+  const handleCloseCertificateDialog = () => {
+    setCertificateDialogOpen(false);
+  };
 
   // OTP handler functions
   const handleOTPSuccess = (session: any) => {
@@ -220,6 +319,68 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          {/* Hamburger to the left of the logo */}
+          <IconButton
+            onClick={handleHamburgerMenuOpen}
+            sx={{
+              color: 'primary.main',
+              mr: 1,
+              '&:hover': {
+                backgroundColor: '#e3f2fd',
+              },
+            }}
+            aria-label="Open menu"
+          >
+            <MenuIcon />
+          </IconButton>
+
+          <Menu
+            anchorEl={hamburgerMenuAnchor}
+            open={hamburgerMenuOpen}
+            onClose={handleHamburgerMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                minWidth: 200,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                borderRadius: 2,
+                border: '1px solid #e0e0e0',
+              }
+            }}
+          >
+            <MenuItem
+              onClick={handleCertificatesClick}
+              sx={{
+                minHeight: 40,
+                '&:hover': {
+                  bgcolor: '#f5f5f5',
+                },
+              }}
+            >
+              <ListItemText primary="Certificates" />
+            </MenuItem>
+            <MenuItem
+              onClick={handleSeason14Click}
+              sx={{
+                minHeight: 40,
+                pl: 3,
+                '&:hover': {
+                  bgcolor: '#f5f5f5',
+                },
+              }}
+            >
+              <ListItemText primary="Season 14" />
+            </MenuItem>
+          </Menu>
+
           <img 
             src="/rhwb-pulse.ico" 
             alt="RHWB Pulse" 
@@ -258,6 +419,37 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       <Box sx={{ p: 2 }}>
         {children}
       </Box>
+      
+      {/* Certificate Generator Dialog */}
+      <Dialog 
+        open={certificateDialogOpen} 
+        onClose={handleCloseCertificateDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Generate Season 14 Certificate
+        </DialogTitle>
+        <DialogContent>
+          {loadingRunnerData ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress />
+              <Typography sx={{ ml: 2 }}>Loading runner data...</Typography>
+            </Box>
+          ) : runnerData ? (
+            <CertificateGenerator 
+              runner={runnerData}
+            />
+          ) : (
+            <Typography>No runner data available</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCertificateDialog}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

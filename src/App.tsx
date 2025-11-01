@@ -76,6 +76,8 @@ function App() {
   const [hybridToggleMenuAnchor, setHybridToggleMenuAnchor] = useState<null | HTMLElement>(null);
   const hybridToggleMenuOpen = Boolean(hybridToggleMenuAnchor);
 
+  // Hamburger menu moved to header in ProtectedRoute
+
   // Debug mode state from URL parameter
   const [showDebug, setShowDebug] = useState(false);
 
@@ -601,6 +603,8 @@ function App() {
     setHybridToggleMenuAnchor(null);
   };
 
+  // Hamburger menu handlers are now defined in header
+
   // Handle search input changes
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const query = event.target.value;
@@ -889,6 +893,8 @@ function App() {
           borderRadius: 3,
         },
       }}>
+        {/* Hamburger removed: now in header */}
+
         {/* Desktop Layout - Horizontal */}
         <Stack 
           direction={{ xs: 'column', sm: 'row' }} 
