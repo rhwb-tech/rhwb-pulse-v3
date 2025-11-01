@@ -6,6 +6,12 @@ export default function CertificateGeneratorSimple({ runner }) {
   const [url, setUrl] = useState(null);
 
   const generateCertificate = async () => {
+    // Prevent generation if race timing is not available
+    if (!runner.time) {
+      console.warn("Cannot generate certificate: Race timing is not available");
+      return;
+    }
+    
     setLoading(true);
     try {
       console.log("Starting certificate generation for runner:", runner);
@@ -303,18 +309,24 @@ export default function CertificateGeneratorSimple({ runner }) {
         
         <div style={{ marginBottom: '15px' }}>
           <strong style={{ color: '#666', display: 'block', marginBottom: '5px' }}>Race Timing:</strong>
-          <span style={{ fontSize: '16px' }}>
-            {runner.time || 'N/A'}
-            {runner.race_pr && (
-              <span style={{ 
-                fontSize: '12px', 
-                verticalAlign: 'super', 
-                color: '#d32f2f',
-                fontWeight: 'bold',
-                marginLeft: '4px'
-              }}>PR</span>
-            )}
-          </span>
+          {runner.time ? (
+            <span style={{ fontSize: '16px' }}>
+              {runner.time}
+              {runner.race_pr && (
+                <span style={{ 
+                  fontSize: '12px', 
+                  verticalAlign: 'super', 
+                  color: '#d32f2f',
+                  fontWeight: 'bold',
+                  marginLeft: '4px'
+                }}>PR</span>
+              )}
+            </span>
+          ) : (
+            <span style={{ fontSize: '16px', color: '#d32f2f', fontStyle: 'italic' }}>
+              Not recorded
+            </span>
+          )}
         </div>
         
         <div style={{ marginBottom: '15px' }}>
@@ -330,19 +342,43 @@ export default function CertificateGeneratorSimple({ runner }) {
         </div>
       </div>
 
+      {!runner.time && (
+        <div style={{ 
+          backgroundColor: '#fff3cd', 
+          border: '1px solid #ffc107',
+          borderRadius: '8px',
+          padding: '15px',
+          marginBottom: '20px',
+          maxWidth: '500px',
+          margin: '0 auto 20px auto'
+        }}>
+          <p style={{ 
+            margin: 0, 
+            color: '#856404',
+            fontSize: '15px',
+            lineHeight: '1.5'
+          }}>
+            <strong>⚠️ Race Timing Not Available</strong>
+            <br />
+            Your race timing has not been recorded. Please contact your coach to update your race timing, and then check back later to generate your certificate.
+          </p>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
         <button
           onClick={generateCertificate}
-          disabled={loading}
+          disabled={loading || !runner.time}
           style={{
-            backgroundColor: "#28a745",
+            backgroundColor: runner.time ? "#28a745" : "#cccccc",
             color: "white",
             border: "none",
             padding: "10px 20px",
             borderRadius: "8px",
-            cursor: "pointer",
+            cursor: runner.time ? "pointer" : "not-allowed",
             fontSize: "16px",
-            fontWeight: "bold"
+            fontWeight: "bold",
+            opacity: runner.time ? 1 : 0.6
           }}
         >
           {loading ? "Generating..." : "✓ Generate Certificate"}

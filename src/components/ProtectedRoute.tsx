@@ -83,7 +83,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         id: userEmail,
         name: profileData?.runner_name || user?.name || userEmail.split('@')[0] || 'Runner',
         race: seasonData?.race_distance_completed || 'Half Marathon',
-        time: seasonData?.race_timings || 'Completed',
+        time: seasonData?.race_timings || null, // Keep null if not available
         coach: seasonData?.coach || 'RHWB Training Team',
         race_pr: seasonData?.race_pr || false,
         date: new Date().toLocaleDateString()
@@ -100,7 +100,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         id: user?.email || 'unknown',
         name: user?.name || user?.email?.split('@')[0] || 'Runner',
         race: 'Half Marathon',
-        time: 'Completed',
+        time: null, // Set to null to show informational message
         coach: 'RHWB Training Team',
         race_pr: false,
         date: new Date().toLocaleDateString()
