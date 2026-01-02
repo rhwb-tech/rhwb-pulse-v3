@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, CircularProgress, Typography, Alert, Button, TextField, IconButton, Menu, MenuItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Box, CircularProgress, Typography, Alert, Button, TextField, IconButton, Menu, MenuItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { Key } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
 import { getAppConfig } from '../config/appConfig';
 import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
@@ -14,6 +15,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent } = useAuth();
+  const { selectedRunner, userRole, hybridToggle } = useApp();
   const [email, setEmail] = React.useState('');
   const [loginError, setLoginError] = React.useState('');
   // Remove authMethod state since we only have OTP now
@@ -34,6 +36,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const [certificateDialogOpen, setCertificateDialogOpen] = React.useState(false);
   const [runnerData, setRunnerData] = React.useState<any>(null);
   const [loadingRunnerData, setLoadingRunnerData] = React.useState(false);
+  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+  const [snackbarMessage, setSnackbarMessage] = React.useState('');
   
   const handleCertificatesClick = () => {
     // Placeholder: wire up navigation/action here
@@ -43,21 +47,43 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const handleSeason14Click = async () => {
     console.log("Season 14 clicked, opening certificate dialog");
     console.log("User data:", user);
+    console.log("Selected runner:", selectedRunner);
+    console.log("User role:", userRole);
+    
+    // Determine which email to use for certificate generation
+    // For hybrid users in 'myScore' mode, use their own email (like athletes)
+    // For hybrid users in 'myCohorts' mode, they need to select an athlete (like coaches)
+    const isHybridInMyScoreMode = userRole === 'hybrid' && hybridToggle === 'myScore';
+    const isNonAthleteRole = userRole === 'coach' || userRole === 'admin' || (userRole === 'hybrid' && hybridToggle === 'myCohorts');
+    
+    // For coach/admin/hybrid in cohorts mode, check if an athlete is selected
+    if (isNonAthleteRole && !selectedRunner) {
+      setSnackbarMessage('Please select an athlete from the dashboard before generating a certificate.');
+      setSnackbarOpen(true);
+      setHamburgerMenuAnchor(null);
+      return;
+    }
+    
+    // Use selectedRunner email if available (for coach/admin/hybrid in cohorts mode), 
+    // otherwise use logged-in user's email (for athlete or hybrid in myScore mode)
+    const targetEmail = (isNonAthleteRole && selectedRunner) ? selectedRunner : (user?.email || '');
+    
+    if (!targetEmail) {
+      console.error('No email available for certificate generation');
+      setSnackbarMessage('Unable to generate certificate: No email address found.');
+      setSnackbarOpen(true);
+      setHamburgerMenuAnchor(null);
+      return;
+    }
     
     // Fetch runner data from database
     setLoadingRunnerData(true);
     try {
-      const userEmail = user?.email;
-      if (!userEmail) {
-        console.error('No user email available');
-        return;
-      }
-      
       // Fetch runner profile data
       const { data: profileData, error: profileError } = await supabase
         .from('runners_profile')
         .select('runner_name')
-        .eq('email_id', userEmail.toLowerCase())
+        .eq('email_id', targetEmail.toLowerCase())
         .single();
       
       if (profileError) {
@@ -69,7 +95,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       const { data: seasonData, error: seasonError } = await supabase
         .from('runner_season_info')
         .select('race_timings, race_distance_completed, coach, race_pr')
-        .eq('email_id', userEmail.toLowerCase())
+        .eq('email_id', targetEmail.toLowerCase())
         .eq('season', 'Season 14')
         .single();
       
@@ -80,8 +106,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       
       // Combine the data
       const combinedRunnerData = {
-        id: userEmail,
-        name: profileData?.runner_name || user?.name || userEmail.split('@')[0] || 'Runner',
+        id: targetEmail,
+        name: profileData?.runner_name || targetEmail.split('@')[0] || 'Runner',
         race: seasonData?.race_distance_completed || null, // Leave blank if not available
         time: seasonData?.race_timings || null, // Keep null if not available
         coach: seasonData?.coach || null, // Leave blank if not available
@@ -97,8 +123,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       console.error('Error fetching runner data:', error);
       // Fallback to basic data if database fetch fails
       const fallbackData = {
-        id: user?.email || 'unknown',
-        name: user?.name || user?.email?.split('@')[0] || 'Runner',
+        id: targetEmail,
+        name: targetEmail.split('@')[0] || 'Runner',
         race: null, // Leave blank if not available
         time: null, // Set to null to show informational message
         coach: null, // Leave blank if not available
@@ -116,6 +142,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   
   const handleCloseCertificateDialog = () => {
     setCertificateDialogOpen(false);
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
   // OTP handler functions
@@ -452,6 +482,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Snackbar for friendly messages */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity="info" sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

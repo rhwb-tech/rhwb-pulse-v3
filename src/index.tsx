@@ -5,6 +5,7 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { AuthProvider } from './contexts/AuthContext';
+import { AppProvider } from './contexts/AppContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import AuthCallback from './components/AuthCallback';
@@ -19,10 +20,12 @@ root.render(
     <ThemeProvider theme={theme}>
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path="*" element={<ProtectedRoute><App /></ProtectedRoute>} />
-          </Routes>
+          <AppProvider>
+            <Routes>
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="*" element={<ProtectedRoute><App /></ProtectedRoute>} />
+            </Routes>
+          </AppProvider>
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>

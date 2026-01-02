@@ -10,6 +10,7 @@ import CumulativeScore from './components/CumulativeScore';
 import ActivitySummary from './components/ActivitySummary';
 import TrainingFeedback from './components/TrainingFeedback';
 import { useAuth } from './contexts/AuthContext';
+import { useApp } from './contexts/AppContext';
 
 interface Option {
   value: string;
@@ -24,6 +25,7 @@ function getQuantSql(season: string, email: string) {
 
 function App() {
   const { user } = useAuth();
+  const { setSelectedRunner: setContextSelectedRunner, setUserRole: setContextUserRole, setHybridToggle: setContextHybridToggle } = useApp();
   
   // Filter state
   const [season, setSeason] = useState('14'); // Default to Season 14
@@ -37,6 +39,19 @@ function App() {
   const [coachName, setCoachName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Option[]>([]);
+
+  // Sync selectedRunner, userRole, and hybridToggle to context for ProtectedRoute to access
+  useEffect(() => {
+    setContextSelectedRunner(selectedRunner);
+  }, [selectedRunner, setContextSelectedRunner]);
+
+  useEffect(() => {
+    setContextUserRole(userRole);
+  }, [userRole, setContextUserRole]);
+
+  useEffect(() => {
+    setContextHybridToggle(hybridToggle);
+  }, [hybridToggle, setContextHybridToggle]);
 
   // Widget data
   const [data, setData] = useState<QuantitativeScoreData[]>([]);
