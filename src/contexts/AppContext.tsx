@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import type { UserRole } from '../components/FilterPanel';
+import type { UserRole } from '../types/user';
 
 interface AppContextType {
   selectedRunner: string;

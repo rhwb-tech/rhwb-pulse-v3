@@ -1,26 +1,46 @@
 import React from 'react';
-import { Box, CircularProgress, Typography, Alert, Button, TextField, IconButton, Menu, MenuItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar } from '@mui/material';
+import { Box, CircularProgress, Typography, Alert, Button, TextField, IconButton, Menu, MenuItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Avatar } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
+import PersonIcon from '@mui/icons-material/Person';
 import { Key } from '@mui/icons-material';
+import type { Session } from '@supabase/supabase-js';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { getAppConfig } from '../config/appConfig';
 import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
 import { supabase } from './supabaseClient';
+import { useNavigate } from 'react-router-dom';
+import GeminiChatBot from './GeminiChatBot';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent } = useAuth();
+  const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent, session } = useAuth();
   const { selectedRunner, userRole, hybridToggle } = useApp();
+  const navigate = useNavigate();
   const [email, setEmail] = React.useState('');
   const [loginError, setLoginError] = React.useState('');
   // Remove authMethod state since we only have OTP now
   const [showOTPVerification, setShowOTPVerification] = React.useState(false);
+  const [loadingTimeout, setLoadingTimeout] = React.useState(false);
   const appConfig = getAppConfig();
+
+  // Detect timeout scenario: session exists but no user and not loading
+  React.useEffect(() => {
+    if (session && !user && !isLoading) {
+      // This indicates a validation timeout scenario
+      const timer = setTimeout(() => {
+        setLoadingTimeout(true);
+      }, 1000); // Wait 1 second to confirm it's stuck
+
+      return () => clearTimeout(timer);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [session, user, isLoading]);
 
   // Hamburger menu state (moved to header)
   const [hamburgerMenuAnchor, setHamburgerMenuAnchor] = React.useState<null | HTMLElement>(null);
@@ -45,15 +65,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     setHamburgerMenuAnchor(null);
   };
   const handleSeason14Click = async () => {
-    console.log("Season 14 clicked, opening certificate dialog");
-    console.log("User data:", user);
-    console.log("Selected runner:", selectedRunner);
-    console.log("User role:", userRole);
-    
     // Determine which email to use for certificate generation
     // For hybrid users in 'myScore' mode, use their own email (like athletes)
     // For hybrid users in 'myCohorts' mode, they need to select an athlete (like coaches)
-    const isHybridInMyScoreMode = userRole === 'hybrid' && hybridToggle === 'myScore';
     const isNonAthleteRole = userRole === 'coach' || userRole === 'admin' || (userRole === 'hybrid' && hybridToggle === 'myCohorts');
     
     // For coach/admin/hybrid in cohorts mode, check if an athlete is selected
@@ -114,8 +128,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         race_pr: seasonData?.race_pr || false,
         date: new Date().toLocaleDateString()
       };
-      
-      console.log('Fetched runner data:', combinedRunnerData);
+
       setRunnerData(combinedRunnerData);
       setCertificateDialogOpen(true);
       
@@ -148,9 +161,14 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     setSnackbarOpen(false);
   };
 
+  const handleProfileClick = () => {
+    navigate('/profile');
+  };
+
   // OTP handler functions
-  const handleOTPSuccess = (session: any) => {
+  const handleOTPSuccess = (session: Session | null, isPublicLaptop?: boolean) => {
     // OTP verification successful, user will be automatically logged in
+    // The public laptop flag is already handled in AuthOTPVerification component
     setShowOTPVerification(false);
   };
 
@@ -165,7 +183,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const isOverrideMode = !!overrideEmail;
 
   // Show loading spinner while checking authentication
-  if (isLoading) {
+  if (isLoading || loadingTimeout) {
     return (
       <Box
         sx={{
@@ -174,13 +192,48 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: '100vh',
-          gap: 2
+          gap: 2,
+          px: 3
         }}
       >
-        <CircularProgress size={60} />
-        <Typography variant="h6" color="text.secondary">
-          Loading...
-        </Typography>
+        {loadingTimeout ? (
+          <>
+            <Alert severity="warning" sx={{ maxWidth: 500 }}>
+              <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
+                Connection Timeout
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                We're having trouble connecting to the authentication server. This could be due to a slow internet connection or temporary server issue.
+              </Typography>
+            </Alert>
+            <Button
+              variant="contained"
+              onClick={() => window.location.reload()}
+              sx={{
+                background: 'linear-gradient(135deg, #1877F2 0%, #0E5FD3 100%)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #0E5FD3 0%, #0A4EB0 100%)',
+                }
+              }}
+            >
+              Retry Connection
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={logout}
+              sx={{ mt: 1 }}
+            >
+              Sign Out
+            </Button>
+          </>
+        ) : (
+          <>
+            <CircularProgress size={60} />
+            <Typography variant="h6" color="text.secondary">
+              Loading...
+            </Typography>
+          </>
+        )}
       </Box>
     );
   }
@@ -389,6 +442,20 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             }}
           >
             <MenuItem
+              onClick={() => {
+                navigate('/profile');
+                handleHamburgerMenuClose();
+              }}
+              sx={{
+                minHeight: 40,
+                '&:hover': {
+                  bgcolor: '#f5f5f5',
+                },
+              }}
+            >
+              <ListItemText primary="Profile" />
+            </MenuItem>
+            <MenuItem
               onClick={handleCertificatesClick}
               sx={{
                 minHeight: 40,
@@ -437,14 +504,45 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             </Typography>
           </Box>
         </Box>
-        
-        <Button 
-          variant="outlined" 
-          onClick={logout}
-          size="small"
-        >
-          Sign Out
-        </Button>
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {/* Profile Avatar */}
+          <IconButton
+            onClick={handleProfileClick}
+            sx={{
+              p: 0,
+              '&:hover': {
+                transform: 'scale(1.05)',
+                transition: 'transform 0.2s'
+              }
+            }}
+          >
+            <Avatar
+              sx={{
+                width: 40,
+                height: 40,
+                bgcolor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                '&:hover': {
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)'
+                }
+              }}
+            >
+              <PersonIcon />
+            </Avatar>
+          </IconButton>
+
+          {/* Sign Out Button */}
+          <Button
+            variant="outlined"
+            onClick={logout}
+            size="small"
+          >
+            Sign Out
+          </Button>
+        </Box>
       </Box>
       
       {/* Main content */}
@@ -494,6 +592,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
           {snackbarMessage}
         </Alert>
       </Snackbar>
+
+      {/* Gemini AI Chatbot */}
+      <GeminiChatBot />
     </Box>
   );
 };

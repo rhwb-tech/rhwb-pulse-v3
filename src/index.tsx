@@ -9,6 +9,7 @@ import { AppProvider } from './contexts/AppContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import AuthCallback from './components/AuthCallback';
+import UserProfile from './components/UserProfile';
 
 const theme = createTheme();
 
@@ -23,7 +24,8 @@ root.render(
           <AppProvider>
             <Routes>
               <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route path="*" element={<ProtectedRoute><App /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+              <Route path="/" element={<ProtectedRoute><App /></ProtectedRoute>} />
             </Routes>
           </AppProvider>
         </AuthProvider>

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Alert, Button, TextField, CircularProgress } from '@mui/material';
+import { Box, Typography, Alert, Button, TextField, CircularProgress, Checkbox, FormControlLabel } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 
 interface AuthOTPVerificationProps {
   email: string;
   onBack: () => void;
-  onSuccess: (session: any) => void;
+  onSuccess: (session: Session | null, isPublicLaptop?: boolean) => void;
 }
 
 const AuthOTPVerification: React.FC<AuthOTPVerificationProps> = ({ 
@@ -20,6 +21,7 @@ const AuthOTPVerification: React.FC<AuthOTPVerificationProps> = ({
   const [isResending, setIsResending] = useState(false);
   const [otpExpiryTime, setOtpExpiryTime] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<string>('');
+  const [isPublicLaptop, setIsPublicLaptop] = useState(false);
 
   // Set initial OTP expiry time (10 minutes from now)
   useEffect(() => {
@@ -73,7 +75,30 @@ const AuthOTPVerification: React.FC<AuthOTPVerificationProps> = ({
       }
 
       if (data.session) {
-        onSuccess(data.session);
+        // If public laptop is checked, set flag to use sessionStorage instead of localStorage
+        if (isPublicLaptop) {
+          try {
+            // Set flag in sessionStorage (cleared when browser closes)
+            sessionStorage.setItem('rhwb-pulse-public-laptop', 'true');
+            // Clear any existing localStorage session data
+            Object.keys(localStorage).forEach(key => {
+              if (key.startsWith('rhwb-pulse-')) {
+                localStorage.removeItem(key);
+              }
+            });
+            console.log('Public laptop mode enabled - session will not persist after browser close');
+          } catch (err) {
+            console.warn('Failed to set public laptop mode:', err);
+          }
+        } else {
+          // Clear the flag if unchecked
+          try {
+            sessionStorage.removeItem('rhwb-pulse-public-laptop');
+          } catch (err) {
+            console.warn('Failed to clear public laptop flag:', err);
+          }
+        }
+        onSuccess(data.session, isPublicLaptop);
       } else {
         setError('Invalid OTP code');
       }
@@ -169,6 +194,29 @@ const AuthOTPVerification: React.FC<AuthOTPVerificationProps> = ({
               sx={{ mb: 2 }}
               disabled={isExpired || isLoading}
             />
+            <Box sx={{ mb: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={isPublicLaptop}
+                    onChange={(e) => setIsPublicLaptop(e.target.checked)}
+                    disabled={isExpired || isLoading}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      I am logging in from a public or shared laptop/device
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      Your session will not be saved after you close the browser
+                    </Typography>
+                  </Box>
+                }
+                sx={{ width: '100%', m: 0 }}
+              />
+            </Box>
             <Button 
               type="submit"
               fullWidth

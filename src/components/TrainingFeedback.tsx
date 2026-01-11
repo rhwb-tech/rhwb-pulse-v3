@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, Card, CardContent, Chip, Stack } from '@mui/material';
+import { Box, Typography, Card, CardContent, IconButton, Stack } from '@mui/material';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import { supabase } from './supabaseClient';
@@ -7,15 +7,13 @@ import { supabase } from './supabaseClient';
 interface TrainingFeedbackProps {
   feedback: Array<{meso: string, qual: string}>;
   userEmail?: string;
-  emailId?: string; // Add email_id from v_rhwb_meso_scores
+  emailId?: string;
 }
 
 const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail, emailId }) => {
   const [clickedIcons, setClickedIcons] = React.useState<Set<string>>(new Set());
   const [interactions, setInteractions] = React.useState<{[key: string]: {acknowledge: boolean, love: boolean}}>({});
-  const isMobile = window.innerWidth <= 768;
 
-  // Use emailId from v_rhwb_meso_scores if available, otherwise fall back to userEmail
   const currentEmail = emailId || userEmail;
 
   const handleIconClick = async (eventName: string, valueText: string, iconId: string, mesoCycle: string) => {
@@ -110,33 +108,42 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
 
   if (!feedback || feedback.length === 0) {
     return (
-      <Box sx={{ 
-        width: '100%', 
-        bgcolor: 'background.paper', 
-        borderRadius: 2, 
-        p: isMobile ? 2 : 3, 
-        boxShadow: 1, 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        minHeight: isMobile ? 150 : 200 
+      <Box sx={{
+        width: '100%',
+        bgcolor: 'background.paper',
+        borderRadius: 3,
+        p: { xs: 2.5, sm: 3 },
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+        border: '1px solid rgba(0, 0, 0, 0.05)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: { xs: 180, sm: 220 },
+        transition: 'all 0.3s ease',
+        '&:hover': {
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
+        }
       }}>
-        <Typography 
-          variant="h6" 
-          gutterBottom 
-          sx={{ 
-            fontSize: isMobile ? '1.1rem' : '1.25rem',
-            fontWeight: 600
+        <Typography
+          variant="h6"
+          sx={{
+            fontSize: { xs: '1.1rem', sm: '1.25rem' },
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mb: 1
           }}
         >
           Training Feedback
         </Typography>
-        <Typography 
-          variant="body2" 
-          color="text.secondary" 
+        <Typography
+          variant="body2"
+          color="text.secondary"
           align="center"
-          sx={{ fontSize: isMobile ? '14px' : '16px' }}
+          sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
         >
           No training feedback available for this period.
         </Typography>
@@ -145,107 +152,149 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
   }
 
   return (
-    <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Typography 
-        variant="h6" 
-        gutterBottom 
-        sx={{ 
-          mb: isMobile ? 1 : 2, 
-          fontWeight: 600,
-          fontSize: isMobile ? '1.1rem' : '1.25rem'
-        }}
-      >
-        Training Feedback
-      </Typography>
-      <Typography 
-        variant="body2" 
-        color="text.secondary" 
-        sx={{ 
-          mb: isMobile ? 2 : 3,
-          fontSize: isMobile ? '14px' : '16px'
-        }}
-      >
-        Review your coach's feedback for each mesocycle
-      </Typography>
-      
-      <Box sx={{ flex: 1, overflowY: 'auto', pr: isMobile ? 0.5 : 1 }}>
-        <Stack spacing={isMobile ? 1.5 : 2}>
-          {feedback.map((item, index) => (
-            <Card 
-              key={item.meso} 
-              sx={{ 
-                border: index === 0 ? '2px solid #4caf50' : '2px solid #e0e0e0',
-                borderRadius: 2,
-                ml: isMobile ? 1 : 16,
-                '&:hover': {
-                  boxShadow: 2,
-                }
-              }}
-            >
-            <CardContent sx={{ p: isMobile ? 2 : 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: isMobile ? 1.5 : 2 }}>
-                <Typography 
-                  variant="h6" 
-                  sx={{ 
-                    fontWeight: 600, 
-                    color: '#333',
-                    fontSize: isMobile ? '1rem' : '1.25rem'
+    <Box sx={{
+      width: '100%',
+      bgcolor: 'background.paper',
+      borderRadius: 3,
+      p: { xs: 2.5, sm: 3 },
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+      border: '1px solid rgba(0, 0, 0, 0.05)',
+      transition: 'all 0.3s ease',
+      '&:hover': {
+        boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
+      }
+    }}>
+      {/* Header */}
+      <Box sx={{ mb: { xs: 2.5, sm: 3 } }}>
+        <Typography
+          variant="h6"
+          sx={{
+            fontSize: { xs: '1.1rem', sm: '1.25rem' },
+            fontWeight: 700,
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            mb: 0.5
+          }}
+        >
+          Training Feedback
+        </Typography>
+        <Typography
+          variant="body2"
+          sx={{
+            color: '#666',
+            fontSize: { xs: '0.75rem', sm: '0.8125rem' }
+          }}
+        >
+          Review your coach's feedback for each mesocycle
+        </Typography>
+      </Box>
+
+      {/* Feedback Cards */}
+      <Stack spacing={{ xs: 2, sm: 2.5 }}>
+        {feedback.map((item, index) => (
+          <Card
+            key={item.meso}
+            sx={{
+              background: 'rgba(255, 255, 255, 0.5)',
+              border: '1px solid rgba(0, 0, 0, 0.08)',
+              borderRadius: 2.5,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+                transform: 'translateY(-2px)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
+              {/* Meso Title & Icons */}
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                mb: { xs: 1.5, sm: 2 }
+              }}>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 700,
+                    fontSize: { xs: '0.95rem', sm: '1.1rem' },
+                    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
                   }}
                 >
                   {item.meso}
                 </Typography>
-                <Stack direction="row" spacing={isMobile ? 0.5 : 1}>
-                  <Chip
-                    icon={<ThumbUpIcon />}
-                    label=""
-                    size={isMobile ? "small" : "small"}
+
+                {/* Interaction Icons */}
+                <Stack direction="row" spacing={0.5}>
+                  <IconButton
+                    size="small"
                     onClick={() => handleIconClick('training feedback', 'Acknowledge', `like-${item.meso}`, item.meso)}
                     title={interactions[item.meso]?.acknowledge ? "Remove acknowledgement" : "Acknowledge this feedback"}
-                    sx={{ 
-                      bgcolor: interactions[item.meso]?.acknowledge ? '#4caf50' : '#2196f3', 
+                    sx={{
+                      width: { xs: 36, sm: 40 },
+                      height: { xs: 36, sm: 40 },
+                      background: interactions[item.meso]?.acknowledge
+                        ? 'linear-gradient(135deg, #43E97B, #38F9D7)'
+                        : 'linear-gradient(135deg, #4FACFE, #00F2FE)',
                       color: 'white',
-                      minWidth: isMobile ? 28 : 32,
-                      height: isMobile ? 28 : 32,
-                      cursor: 'pointer',
-                      transform: clickedIcons.has(`like-${item.meso}`) ? 'scale(1.2)' : 'scale(1)',
-                      transition: 'all 0.2s ease-in-out',
+                      boxShadow: interactions[item.meso]?.acknowledge
+                        ? '0 4px 12px rgba(67, 233, 123, 0.3)'
+                        : '0 4px 12px rgba(79, 172, 254, 0.3)',
+                      transform: clickedIcons.has(`like-${item.meso}`) ? 'scale(1.15)' : 'scale(1)',
+                      transition: 'all 0.3s ease',
                       '&:hover': {
-                        bgcolor: interactions[item.meso]?.acknowledge ? '#45a049' : '#1976d2',
-                        transform: 'scale(1.05)',
-                      },
-                      '& .MuiChip-icon': { color: 'white' }
+                        transform: 'scale(1.1)',
+                        boxShadow: interactions[item.meso]?.acknowledge
+                          ? '0 6px 20px rgba(67, 233, 123, 0.4)'
+                          : '0 6px 20px rgba(79, 172, 254, 0.4)',
+                      }
                     }}
-                  />
-                  <Chip
-                    icon={<FavoriteIcon />}
-                    label=""
-                    size={isMobile ? "small" : "small"}
+                  >
+                    <ThumbUpIcon sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }} />
+                  </IconButton>
+
+                  <IconButton
+                    size="small"
                     onClick={() => handleIconClick('training feedback', 'Love', `love-${item.meso}`, item.meso)}
                     title={interactions[item.meso]?.love ? "Remove love" : "Love this feedback"}
-                    sx={{ 
-                      bgcolor: interactions[item.meso]?.love ? '#4caf50' : '#f44336', 
+                    sx={{
+                      width: { xs: 36, sm: 40 },
+                      height: { xs: 36, sm: 40 },
+                      background: interactions[item.meso]?.love
+                        ? 'linear-gradient(135deg, #43E97B, #38F9D7)'
+                        : 'linear-gradient(135deg, #FF6B9D, #C449C2)',
                       color: 'white',
-                      minWidth: isMobile ? 28 : 32,
-                      height: isMobile ? 28 : 32,
-                      cursor: 'pointer',
-                      transform: clickedIcons.has(`love-${item.meso}`) ? 'scale(1.2)' : 'scale(1)',
-                      transition: 'all 0.2s ease-in-out',
+                      boxShadow: interactions[item.meso]?.love
+                        ? '0 4px 12px rgba(67, 233, 123, 0.3)'
+                        : '0 4px 12px rgba(255, 107, 157, 0.3)',
+                      transform: clickedIcons.has(`love-${item.meso}`) ? 'scale(1.15)' : 'scale(1)',
+                      transition: 'all 0.3s ease',
                       '&:hover': {
-                        bgcolor: interactions[item.meso]?.love ? '#45a049' : '#d32f2f',
-                        transform: 'scale(1.05)',
-                      },
-                      '& .MuiChip-icon': { color: 'white' }
+                        transform: 'scale(1.1)',
+                        boxShadow: interactions[item.meso]?.love
+                          ? '0 6px 20px rgba(67, 233, 123, 0.4)'
+                          : '0 6px 20px rgba(255, 107, 157, 0.4)',
+                      }
                     }}
-                  />
+                  >
+                    <FavoriteIcon sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }} />
+                  </IconButton>
                 </Stack>
               </Box>
-              
-              <Typography 
-                variant="body1" 
-                sx={{ 
-                  lineHeight: 1.6, 
-                  color: '#333',
-                  fontSize: isMobile ? '14px' : '16px'
+
+              {/* Feedback Text */}
+              <Typography
+                variant="body1"
+                sx={{
+                  lineHeight: 1.7,
+                  color: '#444',
+                  fontSize: { xs: '0.85rem', sm: '0.9375rem' }
                 }}
               >
                 {item.qual}
@@ -255,7 +304,6 @@ const TrainingFeedback: React.FC<TrainingFeedbackProps> = ({ feedback, userEmail
         ))}
       </Stack>
     </Box>
-  </Box>
   );
 };
 

@@ -1,7 +1,34 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || '<YOUR_SUPABASE_URL>';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '<YOUR_SUPABASE_ANON_KEY>';
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+// Validate required environment variables
+if (!supabaseUrl || supabaseUrl.includes('<YOUR_SUPABASE_URL>')) {
+  throw new Error(
+    'REACT_APP_SUPABASE_URL is not configured. Please check your .env.local file.'
+  );
+}
+
+if (!supabaseAnonKey || supabaseAnonKey.includes('<YOUR_SUPABASE_ANON_KEY>')) {
+  throw new Error(
+    'REACT_APP_SUPABASE_ANON_KEY is not configured. Please check your .env.local file.'
+  );
+}
+
+// Helper to check if public laptop mode is enabled
+const isPublicLaptopMode = (): boolean => {
+  try {
+    return sessionStorage.getItem('rhwb-pulse-public-laptop') === 'true';
+  } catch {
+    return false;
+  }
+};
+
+// Helper to get the appropriate storage (sessionStorage for public laptop, localStorage otherwise)
+const getStorage = () => {
+  return isPublicLaptopMode() ? sessionStorage : localStorage;
+};
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -12,25 +39,63 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: {
       getItem: (key) => {
         try {
-          return localStorage.getItem(`rhwb-pulse-${key}`);
+          const storage = getStorage();
+          return storage.getItem(`rhwb-pulse-${key}`);
         } catch {
           return null;
         }
       },
       setItem: (key, value) => {
         try {
-          localStorage.setItem(`rhwb-pulse-${key}`, value);
+          const storage = getStorage();
+          storage.setItem(`rhwb-pulse-${key}`, value);
         } catch {
           // Handle storage errors
         }
       },
       removeItem: (key) => {
         try {
-          localStorage.removeItem(`rhwb-pulse-${key}`);
+          const storage = getStorage();
+          storage.removeItem(`rhwb-pulse-${key}`);
         } catch {
           // Handle storage errors
         }
       }
     }
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'rhwb-pulse-v3'
+    }
+  },
+  db: {
+    schema: 'public'
   }
-}); 
+});
+
+// Helper to ensure Supabase is fully initialized before making queries
+let initializationPromise: Promise<void> | null = null;
+let isInitialized = false;
+
+export const ensureSupabaseInitialized = async (): Promise<void> => {
+  if (isInitialized) {
+    return;
+  }
+
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+
+  initializationPromise = (async () => {
+    console.log('[SUPABASE] Adding small delay for client initialization...');
+
+    // Just add a small delay to let any pending initialization complete
+    // Don't call getSession() as that itself can hang
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    console.log('[SUPABASE] Proceeding with queries');
+    isInitialized = true;
+  })();
+
+  return initializationPromise;
+}; 
