@@ -279,6 +279,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const currentOverrideEmailRef = React.useRef<string | null>(null);
   const overrideAbortControllerRef = React.useRef<AbortController | null>(null);
   const pendingOverrideEmailRef = React.useRef<string | null>(null);
+  const isLoggingOutRef = React.useRef<boolean>(false);
 
   // Initialize auth state
   useEffect(() => {
@@ -368,6 +369,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log(`[AUTH STATE CHANGE] Event: ${event}, Has session: ${!!session}`);
+
+        // Skip all processing if logout is in progress
+        if (isLoggingOutRef.current) {
+          console.log('[AUTH STATE CHANGE] Logout in progress, skipping validation');
+          return;
+        }
+
         try {
           setSession(session);
 
@@ -459,6 +467,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Handle URL parameter changes for email override (only when session exists)
   useEffect(() => {
     console.log('[URL OVERRIDE EFFECT] Running, has session:', !!session?.user, 'location.search:', location.search);
+
+    // Skip if logout is in progress
+    if (isLoggingOutRef.current) {
+      console.log('[URL OVERRIDE EFFECT] Logout in progress, skipping');
+      return;
+    }
 
     // If no session, check for email parameter and store it for after authentication
     if (!session?.user) {
@@ -696,7 +710,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 
   const logout = async (): Promise<void> => {
+    // Prevent multiple simultaneous logout calls
+    if (isLoggingOutRef.current) {
+      console.log('[LOGOUT] Logout already in progress, skipping');
+      return;
+    }
+
     try {
+      isLoggingOutRef.current = true;
       console.log('[LOGOUT] Clearing all authentication state and cache');
 
       // Clear the email sent state
@@ -737,8 +758,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         console.log('[LOGOUT] Successfully signed out');
       }
+
+      // Reset logout flag after a short delay to allow auth state changes to propagate
+      setTimeout(() => {
+        isLoggingOutRef.current = false;
+        console.log('[LOGOUT] Logout flag reset');
+      }, 1000);
     } catch (error) {
       console.error('[LOGOUT] Error during logout:', error);
+      isLoggingOutRef.current = false;
     }
   };
 
