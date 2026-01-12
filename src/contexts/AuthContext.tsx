@@ -124,12 +124,28 @@ const performValidation = async (email: string, retryCount: number): Promise<{
       };
     }
 
-    // Step 2: Query user role from database with timeout (increased to 30s)
+    // Step 2: Query user role from database with timeout (5s)
     console.log(`[AUTH] Starting validation for: ${email} (attempt ${retryCount + 1})`);
     const startTime = Date.now();
 
+    // Try to get the current session first to trigger any initialization (with short timeout)
+    try {
+      console.log('[AUTH] Pre-checking session before query...');
+      const sessionCheckTimeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Session check timeout')), 2000);
+      });
+      await Promise.race([
+        supabase.auth.getSession(),
+        sessionCheckTimeout
+      ]).catch(() => {
+        console.log('[AUTH] Session check timed out or failed, proceeding anyway');
+      });
+    } catch (err) {
+      console.log('[AUTH] Session pre-check error (continuing):', err);
+    }
+
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Database query timeout')), 30000);
+      setTimeout(() => reject(new Error('Database query timeout')), 5000);
     });
 
     console.log(`[AUTH] Executing Supabase query for: ${email}`);
@@ -368,12 +384,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log(`[AUTH STATE CHANGE] Event: ${event}, Has session: ${!!session}`);
+        console.log(`[AUTH STATE CHANGE] Event: ${event}, Has session: ${!!session}, Current user: ${!!user}`);
 
         // Skip all processing if logout is in progress
         if (isLoggingOutRef.current) {
           console.log('[AUTH STATE CHANGE] Logout in progress, skipping validation');
+          setSession(null);
+          setUser(null);
+          setIsLoading(false);
           return;
+        }
+
+        // If we're getting a SIGNED_IN event but user is currently null, it might be a spurious event after logout
+        if (event === 'SIGNED_IN' && !user && session?.user) {
+          console.log('[AUTH STATE CHANGE] SIGNED_IN event with no current user - may be spurious, checking...');
+          // This could be legitimate (first login) or spurious (after logout)
+          // We'll process it but with caution
         }
 
         try {
@@ -462,6 +488,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
 
     return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle URL parameter changes for email override (only when session exists)
@@ -752,6 +779,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       validationCache.clear();
       console.log('[LOGOUT] Cleared validation cache');
 
+      // Clear user and session immediately
+      setUser(null);
+      setSession(null);
+
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('[LOGOUT] Supabase sign out error:', error);
@@ -759,11 +790,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log('[LOGOUT] Successfully signed out');
       }
 
-      // Reset logout flag after a short delay to allow auth state changes to propagate
+      // Clear all Supabase storage to prevent session recovery issues
+      try {
+        const storage = sessionStorage.getItem('rhwb-pulse-public-laptop') === 'true' ? sessionStorage : localStorage;
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < storage.length; i++) {
+          const key = storage.key(i);
+          if (key && key.startsWith('rhwb-pulse-')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => storage.removeItem(key));
+        console.log(`[LOGOUT] Cleared ${keysToRemove.length} storage keys`);
+      } catch (err) {
+        console.error('[LOGOUT] Error clearing storage:', err);
+      }
+
+      // Reset logout flag after a longer delay to ensure all auth state changes complete
       setTimeout(() => {
         isLoggingOutRef.current = false;
         console.log('[LOGOUT] Logout flag reset');
-      }, 1000);
+      }, 3000);
     } catch (error) {
       console.error('[LOGOUT] Error during logout:', error);
       isLoggingOutRef.current = false;
