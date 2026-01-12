@@ -67,32 +67,58 @@ const GeminiChatBot: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const model = chatRef.current.getGenerativeModel({
-        model: process.env.REACT_APP_GEMINI_MODEL || 'gemini-pro'
-      });
+      // Get FileSearchStore name from environment
+      const fileSearchStoreName = process.env.REACT_APP_FILE_SEARCH_STORE_NAME;
 
-      // Build conversation history (exclude initial assistant greeting and ensure first message is from user)
-      const history = messages
+      // Use gemini-2.0-flash-exp model (similar to gemini-2.5-flash in working example)
+      const modelName = process.env.REACT_APP_GEMINI_MODEL || 'gemini-2.0-flash-exp';
+
+      console.log('[CHATBOT] Using model:', modelName, 'with file search store:', fileSearchStoreName);
+
+      // Build conversation context from previous messages
+      const conversationHistory = messages
         .filter((msg, index) => {
           // Skip the initial assistant greeting (first message)
           if (index === 0 && msg.role === 'assistant') return false;
           return true;
         })
-        .map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }]
-        }));
+        .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+        .join('\n');
 
-      const chat = model.startChat({
-        history,
-        generationConfig: {
-          maxOutputTokens: 1000,
-        },
+      // Build the full prompt with conversation context
+      const fullPrompt = conversationHistory
+        ? `${conversationHistory}\n\nUser: ${userMessage.content}\n\nAssistant:`
+        : userMessage.content;
+
+      // Configure model with file search tool (following working example structure)
+      const generationConfig: any = {
+        maxOutputTokens: 2000,
+        temperature: 0.7,
+      };
+
+      // Add tools configuration for file search (matching working example)
+      const tools: any[] = [];
+      if (fileSearchStoreName) {
+        tools.push({
+          fileSearch: {
+            fileSearchStoreNames: [fileSearchStoreName]
+          }
+        });
+        console.log('[CHATBOT] File search enabled with store:', fileSearchStoreName);
+      }
+
+      const model = chatRef.current.getGenerativeModel({
+        model: modelName,
+        generationConfig,
+        ...(tools.length > 0 && { tools })
       });
 
-      const result = await chat.sendMessage(userMessage.content);
+      // Use generateContent instead of startChat (matching working example pattern)
+      const result = await model.generateContent(fullPrompt);
       const response = await result.response;
       const text = response.text();
+
+      console.log('[CHATBOT] Response received:', text.substring(0, 100) + '...');
 
       const assistantMessage: Message = {
         role: 'assistant',

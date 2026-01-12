@@ -73,6 +73,23 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Separate client for validation queries (no session persistence to avoid hanging)
+export const supabaseValidation = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+    detectSessionInUrl: false
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'rhwb-pulse-v3-validation'
+    }
+  },
+  db: {
+    schema: 'public'
+  }
+});
+
 // Helper to ensure Supabase is fully initialized before making queries
 let initializationPromise: Promise<void> | null = null;
 let isInitialized = false;
