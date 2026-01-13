@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Button,
   Box,
@@ -8,7 +8,9 @@ import {
   Grid,
   Card,
   IconButton,
-  Container
+  Container,
+  Autocomplete,
+  TextField
 } from '@mui/material';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import MaleIcon from '@mui/icons-material/Male';
@@ -47,6 +49,11 @@ interface TimelineEntry {
   coach: string | null;
 }
 
+interface RunnerOption {
+  runner_name: string;
+  city: string;
+}
+
 const UserProfile: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -54,6 +61,11 @@ const UserProfile: React.FC = () => {
   const [timelineData, setTimelineData] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [runnersList, setRunnersList] = useState<RunnerOption[]>([]);
+  const [referredByValue, setReferredByValue] = useState<string | null>(null);
+  const [savingReferredBy, setSavingReferredBy] = useState(false);
+  const referredByInputRef = useRef<string>('');
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
 
   const fetchProfileData = useCallback(async () => {
     try {
@@ -99,12 +111,58 @@ const UserProfile: React.FC = () => {
     }
   }, [user?.email]);
 
+  const capitalizeWords = (text: string | null | undefined): string => {
+    if (!text) return '';
+    return text
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  const fetchRunnersList = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('runners_profile')
+        .select('runner_name, city')
+        .order('runner_name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching runners list:', error);
+        return;
+      }
+
+      // Filter to get only distinct runner names
+      const seenNames = new Set<string>();
+      const distinctRunners = (data || []).filter((runner) => {
+        if (!runner.runner_name || seenNames.has(runner.runner_name)) {
+          return false;
+        }
+        seenNames.add(runner.runner_name);
+        return true;
+      });
+
+      setRunnersList(distinctRunners);
+    } catch (err) {
+      console.error('Error loading runners list:', err);
+    }
+  }, []);
+
   useEffect(() => {
     if (user?.email) {
       fetchProfileData();
       fetchTimelineData();
+      fetchRunnersList();
     }
-  }, [user?.email, fetchProfileData, fetchTimelineData]);
+  }, [user?.email, fetchProfileData, fetchTimelineData, fetchRunnersList]);
+
+  useEffect(() => {
+    if (profileData?.referred_by) {
+      // Capitalize the existing value when loading
+      setReferredByValue(capitalizeWords(profileData.referred_by));
+    } else {
+      setReferredByValue(null);
+    }
+  }, [profileData?.referred_by]);
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -181,6 +239,41 @@ const UserProfile: React.FC = () => {
     if (!dateString) return 'Not provided';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
+
+  const handleReferredByChange = async (newValue: string | null) => {
+    if (!user?.email) return;
+
+    // Capitalize the value before saving
+    const capitalizedValue = newValue ? capitalizeWords(newValue) : null;
+    setReferredByValue(capitalizedValue);
+    setSavingReferredBy(true);
+
+    try {
+      const { error } = await supabase
+        .from('runners_profile')
+        .update({ referred_by: capitalizedValue || null })
+        .eq('email_id', user.email.toLowerCase());
+
+      if (error) {
+        console.error('Error updating referred_by:', error);
+        alert('Failed to update referred by field. Please try again.');
+        // Revert to previous value on error
+        setReferredByValue(profileData?.referred_by || null);
+      } else {
+        // Update local state
+        if (profileData) {
+          setProfileData({ ...profileData, referred_by: capitalizedValue || '' });
+        }
+      }
+    } catch (err) {
+      console.error('Error updating referred_by:', err);
+      alert('An unexpected error occurred. Please try again.');
+      // Revert to previous value on error
+      setReferredByValue(profileData?.referred_by || null);
+    } finally {
+      setSavingReferredBy(false);
+    }
   };
 
   const DetailItem = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
@@ -393,11 +486,149 @@ const UserProfile: React.FC = () => {
 
             {/* Referred By */}
             <Grid item xs={12} sm={6}>
-              <DetailItem
-                icon={<PersonAddIcon />}
-                label="Referred By"
-                value={profileData?.referred_by || 'Not provided'}
-              />
+              <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                <Box sx={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 1.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: 'rgba(24, 119, 242, 0.1)',
+                  color: '#1877F2',
+                  mr: 1.5,
+                  flexShrink: 0,
+                  fontSize: '1.1rem',
+                  mt: 1
+                }}>
+                  <PersonAddIcon />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'block', lineHeight: 1.2, mb: 0.5 }}>
+                    Referred By
+                  </Typography>
+                  <Autocomplete
+                    freeSolo
+                    open={autocompleteOpen}
+                    onOpen={() => {
+                      // Only open if user has typed something
+                      if (referredByInputRef.current.length > 0) {
+                        setAutocompleteOpen(true);
+                      }
+                    }}
+                    onClose={() => setAutocompleteOpen(false)}
+                    options={runnersList.map((runner) => ({
+                      label: `${capitalizeWords(runner.runner_name)}${runner.city ? `, ${capitalizeWords(runner.city)}` : ''}`,
+                      name: runner.runner_name
+                    }))}
+                    getOptionLabel={(option) => {
+                      if (typeof option === 'string') {
+                        return option;
+                      }
+                      return option.label;
+                    }}
+                    isOptionEqualToValue={(option, value) => {
+                      if (typeof value === 'string') {
+                        return option.name === value;
+                      }
+                      if (typeof value === 'object' && value !== null) {
+                        return option.name === value.name;
+                      }
+                      return false;
+                    }}
+                    value={referredByValue || null}
+                    onChange={(event, newValue) => {
+                      // Extract just the name if it's an object, otherwise use the string value
+                      let nameValue: string | null = null;
+                      if (typeof newValue === 'object' && newValue !== null) {
+                        nameValue = newValue.name;
+                      } else if (typeof newValue === 'string') {
+                        nameValue = newValue;
+                      }
+                      handleReferredByChange(nameValue);
+                      setAutocompleteOpen(false);
+                    }}
+                    onInputChange={(event, newInputValue, reason) => {
+                      // Track input value as user types
+                      referredByInputRef.current = newInputValue;
+                      if (reason === 'input') {
+                        setReferredByValue(newInputValue);
+                        // Open dropdown when user starts typing
+                        if (newInputValue.length > 0) {
+                          setAutocompleteOpen(true);
+                        } else {
+                          setAutocompleteOpen(false);
+                        }
+                      }
+                    }}
+                    filterOptions={(options, params) => {
+                      const searchTerm = params.inputValue.toLowerCase();
+                      if (!searchTerm) {
+                        return [];
+                      }
+                      const filtered = options.filter((option) => {
+                        const label = option.label.toLowerCase();
+                        const name = option.name.toLowerCase();
+                        return label.includes(searchTerm) || name.includes(searchTerm);
+                      });
+                      return filtered;
+                    }}
+                    renderOption={(props, option) => (
+                      <li {...props} key={option.name}>
+                        {option.label}
+                      </li>
+                    )}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder="Search and select a name"
+                        variant="outlined"
+                        size="small"
+                        onBlur={() => {
+                          // Save when user blurs the field after typing
+                          const currentValue = referredByInputRef.current || '';
+                          const normalizedCurrent = currentValue.trim();
+                          const normalizedStored = (profileData?.referred_by || '').trim();
+                          if (normalizedCurrent !== normalizedStored) {
+                            handleReferredByChange(normalizedCurrent || null);
+                          }
+                          setAutocompleteOpen(false);
+                        }}
+                        onFocus={() => {
+                          // Don't open on focus, only when typing
+                          setAutocompleteOpen(false);
+                        }}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            fontSize: '0.875rem',
+                            '& fieldset': {
+                              borderColor: '#e0e0e0',
+                            },
+                            '&:hover fieldset': {
+                              borderColor: '#1877F2',
+                            },
+                            '&.Mui-focused fieldset': {
+                              borderColor: '#1877F2',
+                            },
+                          },
+                        }}
+                      />
+                    )}
+                    loading={loading}
+                    disabled={savingReferredBy}
+                    sx={{
+                      '& .MuiAutocomplete-inputRoot': {
+                        padding: '4px 9px !important',
+                      },
+                    }}
+                  />
+                  {savingReferredBy && (
+                    <Typography variant="caption" sx={{ color: '#1877F2', fontSize: '0.7rem', mt: 0.5, display: 'block' }}>
+                      Saving...
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
             </Grid>
 
             {/* Complete Address */}
