@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { supabase } from '../components/supabaseClient';
+import { supabase, supabaseValidation } from '../components/supabaseClient';
 import { UserRole } from '../types/user';
 import { useLocation } from 'react-router-dom';
 
@@ -51,6 +51,64 @@ const logAuthEvent = async (logEntry: AuthAuditLog): Promise<void> => {
 // Cache for validation requests to prevent duplicate simultaneous calls
 const validationCache = new Map<string, Promise<any>>();
 
+// Persistent cache for validation results (5 minute expiry)
+const VALIDATION_CACHE_KEY = 'rhwb-pulse-validation-cache';
+const VALIDATION_CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CachedValidation {
+  email: string;
+  role: UserRole;
+  fullName: string;
+  timestamp: number;
+}
+
+const getCachedValidation = (email: string): CachedValidation | null => {
+  try {
+    const cached = localStorage.getItem(VALIDATION_CACHE_KEY);
+    if (!cached) return null;
+
+    const validation: CachedValidation = JSON.parse(cached);
+
+    // Check if cache is for the same email and not expired
+    if (validation.email === email.toLowerCase()) {
+      const age = Date.now() - validation.timestamp;
+      if (age < VALIDATION_CACHE_EXPIRY_MS) {
+        console.log(`[AUTH] Using cached validation (age: ${Math.round(age / 1000)}s)`);
+        return validation;
+      } else {
+        console.log(`[AUTH] Cached validation expired (age: ${Math.round(age / 1000)}s)`);
+      }
+    }
+  } catch (err) {
+    console.error('[AUTH] Failed to read validation cache:', err);
+  }
+  return null;
+};
+
+const setCachedValidation = (email: string, role: UserRole, fullName: string): void => {
+  try {
+    const validation: CachedValidation = {
+      email: email.toLowerCase(),
+      role,
+      fullName,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(VALIDATION_CACHE_KEY, JSON.stringify(validation));
+    console.log('[AUTH] Cached validation result');
+  } catch (err) {
+    console.error('[AUTH] Failed to cache validation:', err);
+  }
+};
+
+const clearCachedValidation = (): void => {
+  try {
+    localStorage.removeItem(VALIDATION_CACHE_KEY);
+    console.log('[AUTH] Cleared validation cache');
+  } catch (err) {
+    console.error('[AUTH] Failed to clear validation cache:', err);
+  }
+};
+
 // Helper function to validate email against v_pulse_roles table
 const validateEmailAccess = async (email: string, retryCount = 0): Promise<{
   isValid: boolean;
@@ -91,6 +149,18 @@ const performValidation = async (email: string, retryCount: number): Promise<{
   errorType?: 'config' | 'connection' | 'timeout' | 'unauthorized' | 'not_found';
 }> => {
   try {
+    // Step 0: Check persistent cache first (only on first attempt)
+    if (retryCount === 0) {
+      const cached = getCachedValidation(email);
+      if (cached) {
+        return {
+          isValid: true,
+          role: cached.role,
+          fullName: cached.fullName
+        };
+      }
+    }
+
     // Step 1: Validate Supabase configuration
     if (!process.env.REACT_APP_SUPABASE_URL ||
         process.env.REACT_APP_SUPABASE_URL.includes('<YOUR_SUPABASE_URL>')) {
@@ -135,7 +205,7 @@ const performValidation = async (email: string, retryCount: number): Promise<{
         setTimeout(() => reject(new Error('Session check timeout')), 2000);
       });
       await Promise.race([
-        supabase.auth.getSession(),
+        supabaseValidation.auth.getSession(),
         sessionCheckTimeout
       ]).catch(() => {
         console.log('[AUTH] Session check timed out or failed, proceeding anyway');
@@ -155,7 +225,7 @@ const performValidation = async (email: string, retryCount: number): Promise<{
       // Execute the query with explicit promise handling
       const queryExecutor = async () => {
         console.log(`[AUTH] Query executor started for: ${email}`);
-        const result = await supabase
+        const result = await supabaseValidation
           .from('v_pulse_roles')
           .select('email_id, role, full_name')
           .eq('email_id', email.toLowerCase())
@@ -264,6 +334,9 @@ const performValidation = async (email: string, retryCount: number): Promise<{
       value_text: 'success',
       value_label: `role_${role}`
     });
+
+    // Cache the validation result
+    setCachedValidation(email, role, data.full_name);
 
     return { isValid: true, role, fullName: data.full_name };
 
@@ -746,6 +819,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       isLoggingOutRef.current = true;
       console.log('[LOGOUT] Clearing all authentication state and cache');
+
+      // Clear validation cache
+      clearCachedValidation();
 
       // Clear the email sent state
       setIsEmailSent(false);

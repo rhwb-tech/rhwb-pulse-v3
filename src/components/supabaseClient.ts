@@ -115,4 +115,22 @@ export const ensureSupabaseInitialized = async (): Promise<void> => {
   })();
 
   return initializationPromise;
-}; 
+};
+
+// Query timeout helper - wraps any Supabase query with timeout protection
+export async function queryWithTimeout<T>(
+  queryPromise: Promise<T>,
+  timeoutMs: number = 10000,
+  errorMessage: string = 'Query timeout'
+): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([queryPromise, timeoutPromise]);
+  } catch (error: any) {
+    console.error(`[SUPABASE] ${errorMessage}:`, error);
+    throw error;
+  }
+} 

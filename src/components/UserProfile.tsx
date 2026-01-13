@@ -25,7 +25,7 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import SportsIcon from '@mui/icons-material/Sports';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from './supabaseClient';
+import { supabase, supabaseValidation } from './supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 interface RunnerProfile {
@@ -70,13 +70,63 @@ const UserProfile: React.FC = () => {
   const fetchProfileData = useCallback(async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      console.log('[PROFILE] Starting profile fetch for:', user?.email);
+
+      // Add timeout protection (10 seconds)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Profile query timeout')), 10000);
+      });
+
+      console.log('[PROFILE] Creating query...');
+      const startTime = Date.now();
+      const queryPromise = supabaseValidation
         .from('runners_profile')
         .select('email_id, runner_name, gender, address, zip, city, state, country, phone_no, dob, referred_by, profile_picture')
         .eq('email_id', user?.email?.toLowerCase())
         .single();
 
+      console.log('[PROFILE] Query created, waiting for response...');
+      const { data, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise
+      ]).catch((err) => {
+        const elapsed = Date.now() - startTime;
+        console.error(`[PROFILE] Profile query failed or timed out after ${elapsed}ms:`, err);
+        return { data: null, error: err };
+      }) as { data: RunnerProfile | null; error: any };
+
+      const elapsed = Date.now() - startTime;
+      console.log(`[PROFILE] Query completed in ${elapsed}ms`);
+
       if (error) {
+        console.error('[PROFILE] Supabase client error, trying direct fetch fallback...');
+
+        // Fallback: Try direct REST API call
+        try {
+          const directStartTime = Date.now();
+          const url = `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/runners_profile?email_id=eq.${encodeURIComponent(user?.email?.toLowerCase() || '')}`;
+          const response = await fetch(url, {
+            headers: {
+              'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY || '',
+              'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY || ''}`,
+            },
+          });
+
+          const directElapsed = Date.now() - directStartTime;
+          console.log(`[PROFILE] Direct fetch completed in ${directElapsed}ms`);
+
+          if (response.ok) {
+            const jsonData = await response.json();
+            if (jsonData && jsonData.length > 0) {
+              console.log('[PROFILE] Direct fetch succeeded, using data');
+              setProfileData(jsonData[0]);
+              return;
+            }
+          }
+        } catch (directError) {
+          console.error('[PROFILE] Direct fetch also failed:', directError);
+        }
+
         console.error('Error fetching profile:', error);
         return;
       }
@@ -93,11 +143,24 @@ const UserProfile: React.FC = () => {
 
   const fetchTimelineData = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      // Add timeout protection (10 seconds)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeline query timeout')), 10000);
+      });
+
+      const queryPromise = supabaseValidation
         .from('runner_season_info')
         .select('season, race_distance, coach')
         .eq('email_id', user?.email?.toLowerCase())
         .order('season_no', { ascending: false });
+
+      const { data, error } = await Promise.race([
+        queryPromise,
+        timeoutPromise
+      ]).catch((err) => {
+        console.error('Timeline query failed or timed out:', err);
+        return { data: null, error: err };
+      }) as { data: TimelineEntry[] | null; error: any };
 
       if (error) {
         console.error('Error fetching timeline:', error);
