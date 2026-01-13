@@ -10,10 +10,8 @@ import {
   CircularProgress,
   Fab
 } from '@mui/material';
-import ChatIcon from '@mui/icons-material/Chat';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -28,7 +26,7 @@ const GeminiChatBot: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hi! I\'m your RHWB running assistant. How can I help you today?',
+      content: 'Hi! I\'m Veer, your RHWB running assistant. How can I help you today?',
       timestamp: new Date()
     }
   ]);
@@ -36,6 +34,7 @@ const GeminiChatBot: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<GoogleGenerativeAI | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Initialize Gemini
   useEffect(() => {
@@ -67,11 +66,13 @@ const GeminiChatBot: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Get FileSearchStore name from environment
+      // Get FileSearchStore name and API key from environment
       const fileSearchStoreName = process.env.REACT_APP_FILE_SEARCH_STORE_NAME;
+      const apiKey = process.env.REACT_APP_GEMINI_API_KEY || process.env.CT_APP_GEMINI_API_KEY;
 
-      // Use gemini-2.0-flash-exp model (similar to gemini-2.5-flash in working example)
-      const modelName = process.env.REACT_APP_GEMINI_MODEL || 'gemini-2.0-flash-exp';
+      // Use gemini-2.0-flash-exp model
+      //const modelName = process.env.REACT_APP_GEMINI_MODEL || 'gemini-2.0-flash-exp';
+      const modelName = process.env.REACT_APP_GEMINI_MODEL;
 
       console.log('[CHATBOT] Using model:', modelName, 'with file search store:', fileSearchStoreName);
 
@@ -90,33 +91,57 @@ const GeminiChatBot: React.FC = () => {
         ? `${conversationHistory}\n\nUser: ${userMessage.content}\n\nAssistant:`
         : userMessage.content;
 
-      // Configure model with file search tool (following working example structure)
-      const generationConfig: any = {
-        maxOutputTokens: 2000,
-        temperature: 0.7,
+      // Build request body matching Python SDK structure
+      const requestBody: any = {
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: fullPrompt }]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 2000,
+          temperature: 0.7,
+        }
       };
 
-      // Add tools configuration for file search (matching working example)
-      const tools: any[] = [];
+      // Add file search tool if configured (matching Python SDK structure)
       if (fileSearchStoreName) {
-        tools.push({
-          fileSearch: {
-            fileSearchStoreNames: [fileSearchStoreName]
+        // Use the same format as Python example: fileSearchStores/store-id
+        // No need for full projects/*/locations/global/ prefix
+        const storeName = fileSearchStoreName.startsWith('fileSearchStores/')
+          ? fileSearchStoreName
+          : `fileSearchStores/${fileSearchStoreName}`;
+
+        requestBody.tools = [
+          {
+            file_search: {
+              file_search_store_names: [storeName]
+            }
           }
-        });
-        console.log('[CHATBOT] File search enabled with store:', fileSearchStoreName);
+        ];
+        console.log('[CHATBOT] File search enabled with store:', storeName);
       }
 
-      const model = chatRef.current.getGenerativeModel({
-        model: modelName,
-        generationConfig,
-        ...(tools.length > 0 && { tools })
+      // Call Gemini REST API directly
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
       });
 
-      // Use generateContent instead of startChat (matching working example pattern)
-      const result = await model.generateContent(fullPrompt);
-      const response = await result.response;
-      const text = response.text();
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[CHATBOT] API Error:', errorData);
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const text = data.candidates[0].content.parts[0].text;
 
       console.log('[CHATBOT] Response received:', text.substring(0, 100) + '...');
 
@@ -127,6 +152,11 @@ const GeminiChatBot: React.FC = () => {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+
+      // Refocus input after response
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     } catch (error) {
       console.error('Error calling Gemini API:', error);
       const errorMessage: Message = {
@@ -135,6 +165,11 @@ const GeminiChatBot: React.FC = () => {
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
+
+      // Refocus input after error
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     } finally {
       setIsLoading(false);
     }
@@ -163,14 +198,23 @@ const GeminiChatBot: React.FC = () => {
             position: 'fixed',
             bottom: 24,
             right: 24,
-            background: 'linear-gradient(135deg, #1877F2 0%, #0E5FD3 100%)',
+            background: 'transparent',
+            boxShadow: 'none',
             '&:hover': {
-              background: 'linear-gradient(135deg, #0E5FD3 0%, #0A4EB0 100%)',
+              background: 'transparent',
+              boxShadow: 'none',
             },
-            zIndex: 1000
+            zIndex: 1000,
+            width: 56,
+            height: 56,
+            padding: 0
           }}
         >
-          <ChatIcon />
+          <img
+            src="/veer-avatar.png"
+            alt="Veer"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
         </Fab>
       )}
 
@@ -202,12 +246,24 @@ const GeminiChatBot: React.FC = () => {
             justifyContent: 'space-between'
           }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Avatar sx={{ bgcolor: 'white', color: '#1877F2', width: 40, height: 40 }}>
-                <SmartToyIcon />
-              </Avatar>
+              <Box
+                sx={{
+                  width: 40,
+                  height: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <img
+                  src="/veer-avatar.png"
+                  alt="Veer"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              </Box>
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
-                  RHWB Assistant
+                  Veer
                 </Typography>
                 <Typography variant="caption" sx={{ opacity: 0.9 }}>
                   Powered by Gemini
@@ -239,17 +295,36 @@ const GeminiChatBot: React.FC = () => {
                   flexDirection: message.role === 'user' ? 'row-reverse' : 'row'
                 }}
               >
-                <Avatar
-                  sx={{
-                    width: 32,
-                    height: 32,
-                    bgcolor: message.role === 'user' ? '#1877F2' : '#e9ecef',
-                    color: message.role === 'user' ? 'white' : '#1877F2',
-                    flexShrink: 0
-                  }}
-                >
-                  {message.role === 'user' ? <PersonIcon fontSize="small" /> : <SmartToyIcon fontSize="small" />}
-                </Avatar>
+                {message.role === 'user' ? (
+                  <Avatar
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      bgcolor: '#1877F2',
+                      color: 'white',
+                      flexShrink: 0
+                    }}
+                  >
+                    <PersonIcon fontSize="small" />
+                  </Avatar>
+                ) : (
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    <img
+                      src="/veer-avatar.png"
+                      alt="Veer"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  </Box>
+                )}
                 <Paper
                   elevation={1}
                   sx={{
@@ -280,9 +355,22 @@ const GeminiChatBot: React.FC = () => {
             ))}
             {isLoading && (
               <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Avatar sx={{ width: 32, height: 32, bgcolor: '#e9ecef', color: '#1877F2' }}>
-                  <SmartToyIcon fontSize="small" />
-                </Avatar>
+                <Box
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <img
+                    src="/veer-avatar.png"
+                    alt="Veer"
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                </Box>
                 <Paper elevation={1} sx={{ p: 1.5, borderRadius: 2 }}>
                   <CircularProgress size={20} />
                 </Paper>
@@ -308,6 +396,7 @@ const GeminiChatBot: React.FC = () => {
                 size="small"
                 multiline
                 maxRows={3}
+                inputRef={inputRef}
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2
