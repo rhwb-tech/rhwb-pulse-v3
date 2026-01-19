@@ -51,7 +51,7 @@ export interface ActivitySummaryRow {
 export interface FilterPanelProps {
   season: string;
   onSeasonChange: (season: string) => void;
-  userRole: 'athlete' | 'coach' | 'admin' | 'hybrid';
+  userRole: 'runner' | 'coach' | 'admin' | 'hybrid';
   coachList?: Array<{ value: string; label: string }>;
   runnerList?: Array<{ value: string; label: string }>;
   selectedCoach?: string;

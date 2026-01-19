@@ -3,6 +3,7 @@ import { Box, Fab, Drawer, Typography, IconButton } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
 import { useFilterState } from '../hooks/useFilterState';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useMenuHandlers } from '../hooks/useMenuHandlers';
@@ -11,8 +12,30 @@ import DashboardWidgets from '../components/dashboard/DashboardWidgets';
 
 const DashboardContainer: React.FC = () => {
   const { user } = useAuth();
-  const email = user?.email || '';
-  const userRole = user?.role || 'athlete';
+  const { effectiveEmail, isOverrideActive, overrideEmail } = useApp();
+  
+  // Use effectiveEmail (which respects override) for dashboard data
+  const email = effectiveEmail || user?.email || '';
+
+  // Don't default to 'runner' when user is loading - this prevents clearing coachList on refresh
+  // Wait for user to load before determining role
+  // Keep the actual user role even in override mode so admin filters remain visible
+  const userRole = user?.role;
+
+  // Debug logging for admin users
+  React.useEffect(() => {
+    if (user) {
+      console.log('[DASHBOARD CONTAINER] User:', { email: user.email, role: user.role });
+      console.log('[DASHBOARD CONTAINER] userRole will be:', userRole);
+      console.log('[DASHBOARD CONTAINER] effectiveEmail:', effectiveEmail);
+      console.log('[DASHBOARD CONTAINER] isOverrideActive:', isOverrideActive);
+      if (isOverrideActive) {
+        console.log('[DASHBOARD CONTAINER] Override mode - viewing as:', overrideEmail);
+      }
+    } else {
+      console.log('[DASHBOARD CONTAINER] User is null - userRole will be undefined');
+    }
+  }, [user, effectiveEmail, isOverrideActive, overrideEmail, userRole]);
 
   // Filter drawer state
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
@@ -127,6 +150,8 @@ const DashboardContainer: React.FC = () => {
             selectedRunner={filterState.selectedRunner}
             hybridToggle={filterState.hybridToggle}
             searchQuery={filterState.searchQuery}
+            isOverrideActive={isOverrideActive}
+            overrideEmail={overrideEmail}
             seasonOptions={filterState.seasonOptions}
             coachList={filterState.coachList}
             runnerList={filterState.runnerList}

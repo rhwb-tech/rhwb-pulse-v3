@@ -1,5 +1,8 @@
 import React from 'react';
-import { Box, Chip, Stack, Menu, MenuItem, ListItemText } from '@mui/material';
+import { Box, Chip, Stack, Menu, MenuItem, ListItemText, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
+import SportsIcon from '@mui/icons-material/Sports';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import type { UserRole } from '../../types/user';
 
 interface Option {
@@ -10,11 +13,15 @@ interface Option {
 interface FilterChipsProps {
   // Values
   season: string;
-  userRole: UserRole;
+  userRole: UserRole | undefined;
   selectedCoach?: string;
   selectedRunner?: string;
   hybridToggle?: 'myScore' | 'myCohorts';
   searchQuery?: string;
+  
+  // Override mode
+  isOverrideActive?: boolean;
+  overrideEmail?: string | null;
 
   // Lists
   seasonOptions: Option[];
@@ -60,6 +67,8 @@ const FilterChips: React.FC<FilterChipsProps> = ({
   selectedRunner,
   hybridToggle,
   searchQuery,
+  isOverrideActive = false,
+  overrideEmail,
   seasonOptions,
   coachList,
   runnerList,
@@ -120,27 +129,67 @@ const FilterChips: React.FC<FilterChipsProps> = ({
           ))}
         </Menu>
 
-        {/* Hybrid Toggle Chip */}
+        {/* Hybrid Role Toggle - Modern ToggleButtonGroup */}
         {userRole === 'hybrid' && (
-          <>
-            <Chip
-              label={hybridToggle === 'myScore' ? 'My Score' : 'My Cohorts'}
-              onClick={onHybridToggleMenuOpen}
-              sx={chipStyle}
-            />
-            <Menu
-              anchorEl={hybridToggleMenuAnchor}
-              open={hybridToggleMenuOpen}
-              onClose={onHybridToggleMenuClose}
-            >
-              <MenuItem onClick={() => onHybridToggleChangeFromChip?.('myScore')}>
-                My Score
-              </MenuItem>
-              <MenuItem onClick={() => onHybridToggleChangeFromChip?.('myCohorts')}>
-                My Cohorts
-              </MenuItem>
-            </Menu>
-          </>
+          <ToggleButtonGroup
+            value={hybridToggle === 'myScore' ? 'runner' : 'coach'}
+            exclusive
+            onChange={(e, newValue) => {
+              if (newValue) {
+                onHybridToggleChangeFromChip?.(newValue === 'runner' ? 'myScore' : 'myCohorts');
+              }
+            }}
+            sx={{
+              bgcolor: 'background.paper',
+              height: { xs: 36, sm: 40, md: 44 },
+              '& .MuiToggleButton-root': {
+                px: { xs: 2, sm: 2.5, md: 3 },
+                py: { xs: 0.5, sm: 1 },
+                fontSize: { xs: 14, sm: 16, md: 18 },
+                fontWeight: 600,
+                border: '2px solid #1976d2',
+                color: '#1976d2',
+                textTransform: 'none',
+                '&.Mui-selected': {
+                  bgcolor: '#1976d2',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: '#1565c0',
+                  },
+                },
+                '&:hover': {
+                  bgcolor: '#e3f2fd',
+                },
+              },
+            }}
+          >
+            <ToggleButton value="runner">
+              <DirectionsRunIcon sx={{ mr: { xs: 0.5, sm: 1 }, fontSize: { xs: 18, sm: 20, md: 22 } }} />
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Runner</Box>
+            </ToggleButton>
+            <ToggleButton value="coach">
+              <SportsIcon sx={{ mr: { xs: 0.5, sm: 1 }, fontSize: { xs: 18, sm: 20, md: 22 } }} />
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Coach</Box>
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
+
+        {/* Override Email Chip - shown when admin is viewing another user's data */}
+        {isOverrideActive && overrideEmail && (
+          <Chip
+            icon={<PersonSearchIcon sx={{ fontSize: { xs: 18, sm: 20, md: 22 } }} />}
+            label={overrideEmail}
+            sx={{
+              bgcolor: '#fff3e0',
+              color: '#e65100',
+              fontWeight: 600,
+              fontSize: { xs: 14, sm: 16, md: 18 },
+              borderRadius: 999,
+              px: 2,
+              py: 1,
+              border: '2px solid #ffb74d',
+            }}
+          />
         )}
 
         {/* Coach Chip (Admin only) */}
@@ -161,11 +210,14 @@ const FilterChips: React.FC<FilterChipsProps> = ({
           </>
         )}
 
-        {/* Runner Chip */}
-        {(userRole === 'coach' || userRole === 'admin' || (userRole === 'hybrid' && hybridToggle === 'myCohorts')) && selectedRunner && (
+        {/* Runner Chip - for Coach, Hybrid, or Admin (when coach is selected) */}
+        {((userRole === 'coach') ||
+          (userRole === 'hybrid' && hybridToggle === 'myCohorts') ||
+          (userRole === 'admin' && selectedCoach)) &&
+         runnerList && runnerList.length > 0 && (
           <>
             <Chip
-              label={runnerList?.find(r => r.value === selectedRunner)?.label || selectedRunner}
+              label={selectedRunner ? (runnerList?.find(r => r.value === selectedRunner)?.label || selectedRunner) : 'Select Runner'}
               onClick={onRunnerMenuOpen}
               sx={chipStyle}
             />

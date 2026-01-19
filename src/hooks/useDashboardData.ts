@@ -40,7 +40,7 @@ interface DashboardDataState {
 
 export const useDashboardData = (
   email: string,
-  userRole: UserRole,
+  userRole: UserRole | undefined,
   season: string,
   selectedRunner: string,
   selectedCoach: string,
@@ -55,6 +55,14 @@ export const useDashboardData = (
   const [error, setError] = useState<string | null>(null);
   const [initialLoad, setInitialLoad] = useState(true);
   const shouldAutoFetch = useRef(false);
+  
+  // Track if coach list has been fetched to prevent re-fetching on re-renders
+  const coachListFetchedRef = useRef(false);
+  const lastFetchedRoleRef = useRef<string | null>(null);
+  const isFetchingCoachesRef = useRef(false);
+  
+  // Track runner fetching - use a fetch ID to handle cancellation properly
+  const runnerFetchIdRef = useRef(0);
 
   const [cumulativeScore, setCumulativeScore] = useState<number | null>(null);
   const [activitySummary, setActivitySummary] = useState<{
@@ -106,45 +114,169 @@ export const useDashboardData = (
     fetchCoachNameInternal();
   }, [userRole, email, setCoachName, setError]);
 
-  // Fetch coach/runner lists based on role, season, and selection
+  // EFFECT 1: Fetch coach list for admin (only runs once per session)
   useEffect(() => {
-    if (!season) return;
-    const fetchLists = async () => {
-      if (userRole === 'admin') {
-        const { data: coaches } = await supabase
-          .from('rhwb_coaches')
-          .select('coach')
-          .eq('status', 'Active');
-        const uniqueCoaches = Array.from(new Set((coaches || []).map((r: Pick<Coach, 'coach'>) => r.coach))).filter(Boolean);
-        const coachOptions = uniqueCoaches.map((c: string) => ({ value: c, label: c })).sort((a: Option, b: Option) => a.label.localeCompare(b.label));
-        setCoachList(coachOptions);
+    if (!season || !userRole) {
+      return;
+    }
+    
+    if (userRole !== 'admin') {
+      return;
+    }
 
-        if (selectedCoach) {
-          const seasonNo = Number(season);
-          const { data: runners } = await supabase
-            .rpc('fetch_runners_for_coach', { season_no_parm: seasonNo, coach_name_parm: selectedCoach });
-          const runnerOptions = (runners || []).map((r: Runner) => ({ value: r.email_id, label: r.runner_name })).sort((a: Option, b: Option) => a.label.localeCompare(b.label));
-          setRunnerList(runnerOptions);
-        } else {
-          setRunnerList([]);
-        }
-      } else if (userRole === 'coach' || (userRole === 'hybrid' && hybridToggle === 'myCohorts')) {
-        const coach = coachName;
-        if (!coach) {
-          setRunnerList([]);
+    // Skip if already fetched or currently fetching
+    if (coachListFetchedRef.current && lastFetchedRoleRef.current === 'admin') {
+      console.log('[DASHBOARD DATA] Coach list already fetched for admin, skipping');
+      return;
+    }
+    if (isFetchingCoachesRef.current) {
+      console.log('[DASHBOARD DATA] Already fetching coaches, skipping');
+      return;
+    }
+
+    const fetchCoachList = async () => {
+      isFetchingCoachesRef.current = true;
+      console.log('[DASHBOARD DATA] Fetching ALL coaches for admin...');
+
+      try {
+        const { data: coaches, error } = await supabase
+          .from('rhwb_coaches')
+          .select('coach');
+
+        if (error) {
+          console.error('[DASHBOARD DATA] Error fetching coaches:', error);
+          setError(`Unable to load coaches: ${error.message}`);
+          isFetchingCoachesRef.current = false;
           return;
         }
-        const seasonNo = Number(season);
-        const { data: runners } = await supabase
-          .rpc('fetch_runners_for_coach', { season_no_parm: seasonNo, coach_name_parm: coach });
-        setRunnerList((runners || []).map((r: Runner) => ({ value: r.email_id, label: r.runner_name })).sort((a: Option, b: Option) => a.label.localeCompare(b.label)));
-      } else {
-        setCoachList([]);
-        setRunnerList([]);
+
+        const uniqueCoaches = Array.from(new Set((coaches || []).map((r: Pick<Coach, 'coach'>) => r.coach))).filter(Boolean) as string[];
+        const coachOptions = uniqueCoaches.map((c) => ({ value: c, label: c })).sort((a, b) => a.label.localeCompare(b.label));
+        console.log('[DASHBOARD DATA] Setting coach list:', coachOptions.length, 'coaches');
+        
+        setCoachList(coachOptions);
+        coachListFetchedRef.current = true;
+        lastFetchedRoleRef.current = 'admin';
+        isFetchingCoachesRef.current = false;
+      } catch (err: any) {
+        isFetchingCoachesRef.current = false;
+        console.error('[DASHBOARD DATA] Exception fetching coaches:', err);
+        setError(`Unable to load coaches list: ${err?.message || 'Unknown error'}`);
       }
     };
-    fetchLists();
-  }, [season, userRole, selectedCoach, email, hybridToggle, coachName, setCoachList, setRunnerList]);
+
+    fetchCoachList();
+  }, [season, userRole, setCoachList, setError]);
+
+  // EFFECT 2: Fetch runners when admin selects a coach (runs on selectedCoach change)
+  useEffect(() => {
+    if (!season || userRole !== 'admin') {
+      return;
+    }
+
+    if (selectedCoach) {
+      // Increment fetch ID to track this specific fetch
+      runnerFetchIdRef.current += 1;
+      const currentFetchId = runnerFetchIdRef.current;
+      
+      const seasonNo = Number(season);
+      console.log('[DASHBOARD DATA] Fetching runners for coach:', selectedCoach, 'season:', seasonNo, 'fetchId:', currentFetchId);
+
+      const fetchRunners = async () => {
+        try {
+          const { data: runners, error: runnersError } = await supabase
+            .rpc('fetch_runners_for_coach', { season_no_parm: seasonNo, coach_name_parm: selectedCoach });
+
+          // Check if this fetch is still the current one
+          if (currentFetchId !== runnerFetchIdRef.current) {
+            console.log('[DASHBOARD DATA] Stale runner fetch, ignoring results');
+            return;
+          }
+
+          if (runnersError) {
+            console.error('[DASHBOARD DATA] Error fetching runners:', runnersError);
+            setError(`Unable to load runners: ${runnersError.message}`);
+            return;
+          }
+
+          const runnerOptions = (runners || []).map((r: Runner) => ({ value: r.email_id, label: r.runner_name })).sort((a: Option, b: Option) => a.label.localeCompare(b.label));
+          console.log('[DASHBOARD DATA] Setting runner list:', runnerOptions.length, 'runners');
+          setRunnerList(runnerOptions);
+        } catch (err: any) {
+          console.error('[DASHBOARD DATA] Exception fetching runners:', err);
+          setError(`Unable to load runners: ${err?.message || 'Unknown error'}`);
+        }
+      };
+
+      fetchRunners();
+    } else {
+      console.log('[DASHBOARD DATA] No coach selected, clearing runner list');
+      setRunnerList([]);
+    }
+  }, [season, userRole, selectedCoach, setRunnerList, setError]);
+
+  // EFFECT 3: Fetch runner lists for coach/hybrid roles
+  useEffect(() => {
+    if (!season || !userRole) {
+      return;
+    }
+    
+    // This effect is only for coach and hybrid roles
+    if (userRole !== 'coach' && !(userRole === 'hybrid' && hybridToggle === 'myCohorts')) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    const fetchRunnersForCoachRole = async () => {
+      const coach = coachName;
+      if (!coach) {
+        setRunnerList([]);
+        return;
+      }
+      const seasonNo = Number(season);
+      console.log('[DASHBOARD DATA] Fetching runners for coach role:', coach, 'season:', seasonNo);
+      
+      try {
+        const { data: runners, error } = await supabase
+          .rpc('fetch_runners_for_coach', { season_no_parm: seasonNo, coach_name_parm: coach });
+
+        if (isCancelled) {
+          console.log('[DASHBOARD DATA] Fetch cancelled, ignoring runner results');
+          return;
+        }
+
+        if (error) {
+          console.error('[DASHBOARD DATA] Error fetching runners:', error);
+          setError(`Unable to load runners: ${error.message}`);
+          return;
+        }
+
+        const runnerOptions = (runners || []).map((r: Runner) => ({ value: r.email_id, label: r.runner_name })).sort((a: Option, b: Option) => a.label.localeCompare(b.label));
+        console.log('[DASHBOARD DATA] Setting runner list:', runnerOptions.length, 'runners');
+        setRunnerList(runnerOptions);
+      } catch (err: any) {
+        console.error('[DASHBOARD DATA] Exception fetching runners:', err);
+        setError(`Unable to load runners: ${err?.message || 'Unknown error'}`);
+      }
+    };
+
+    fetchRunnersForCoachRole();
+
+    return () => {
+      isCancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [season, userRole, hybridToggle, coachName]);
+
+  // EFFECT 4: Clear lists for runner role
+  useEffect(() => {
+    if (userRole === 'runner') {
+      console.log('[DASHBOARD DATA] User is runner, clearing lists');
+      setCoachList([]);
+      setRunnerList([]);
+    }
+  }, [userRole, setCoachList, setRunnerList]);
 
   // Search runners for admin users
   const searchRunners = async (query: string, setSearchResults: (results: Option[]) => void) => {
@@ -230,7 +362,7 @@ export const useDashboardData = (
 
   // Fetch widget data
   const fetchWidgetData = useCallback(async () => {
-    if (userRole === 'athlete' || selectedRunner) {
+    if (userRole === 'runner' || selectedRunner) {
       await fetchWidgetDataForRunner(selectedRunner || email);
     }
   }, [email, userRole, selectedRunner, fetchWidgetDataForRunner]);
@@ -365,14 +497,14 @@ export const useDashboardData = (
   // On initial app load
   useEffect(() => {
     if (email && userRole && initialLoad) {
-      if (userRole === 'athlete') {
+      if (userRole === 'runner') {
         fetchWidgetData();
       }
       setInitialLoad(false);
       shouldAutoFetch.current = true;
     }
     if (email && userRole && !initialLoad && loading) {
-      if (userRole !== 'athlete' && !selectedRunner) {
+      if (userRole !== 'runner' && !selectedRunner) {
         setLoading(false);
       }
     }
