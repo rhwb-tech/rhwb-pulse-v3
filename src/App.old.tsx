@@ -23,7 +23,7 @@ function App() {
   // Filter state
   const [season, setSeason] = useState('14'); // Default to Season 14
   const email = user?.email || '';
-  const userRole = user?.role || 'athlete';
+  const userRole = user?.role || 'runner';
   const [coachList, setCoachList] = useState<Option[]>([]);
   const [runnerList, setRunnerList] = useState<Option[]>([]);
   const [selectedCoach, setSelectedCoach] = useState('');
@@ -205,7 +205,7 @@ function App() {
         
         setRunnerList((runners || []).map((r: any) => ({ value: r.email_id, label: r.runner_name })).sort((a: Option, b: Option) => a.label.localeCompare(b.label)));
       } else {
-        // Athlete: no runner/coach lists
+        // Runner: no runner/coach lists
         setCoachList([]);
         setRunnerList([]);
       }
@@ -215,8 +215,8 @@ function App() {
 
   // Fetch widget data (QuantitativeScores) on Apply
   const fetchWidgetData = useCallback(async () => {
-    // Only fetch if we have a valid selectedRunner (for non-athlete roles)
-    if (userRole === 'athlete' || selectedRunner) {
+    // Only fetch if we have a valid selectedRunner (for non-runner roles)
+    if (userRole === 'runner' || selectedRunner) {
       await fetchWidgetDataForRunner(selectedRunner || email);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -261,7 +261,7 @@ function App() {
         query = query.eq('season', `Season ${season}`).eq('email_id', email);
       }
     } else {
-      // athlete
+      // runner
       query = query.eq('season', `Season ${season}`).eq('email_id', email);
     }
     
@@ -322,7 +322,7 @@ function App() {
         query = query.eq('season', `Season ${seasonValue}`).eq('email_id', email);
       }
     } else {
-      // athlete
+      // runner
       query = query.eq('season', `Season ${seasonValue}`).eq('email_id', email);
     }
     
@@ -349,8 +349,8 @@ function App() {
   // On initial app load or when email changes from URL, fetch Quantitative Scores
   useEffect(() => {
     if (email && userRole && initialLoad) {
-      // Only fetch data immediately for athletes, others wait for runner selection
-      if (userRole === 'athlete') {
+      // Only fetch data immediately for runners, others wait for runner selection
+      if (userRole === 'runner') {
         fetchWidgetData();
       }
       setInitialLoad(false);
@@ -358,8 +358,8 @@ function App() {
     }
     // Ensure loading is set to false if we have user info but no data fetching is needed
     if (email && userRole && !initialLoad && loading) {
-      // For non-athlete users, if we have user info but no runner selected, still stop loading
-      if (userRole !== 'athlete' && !selectedRunner) {
+      // For non-runner users, if we have user info but no runner selected, still stop loading
+      if (userRole !== 'runner' && !selectedRunner) {
         setLoading(false);
       }
     }
@@ -384,7 +384,7 @@ function App() {
 
   // When selectedRunner changes, fetch widget data
   useEffect(() => {
-    if (selectedRunner || userRole === 'athlete') {
+    if (selectedRunner || userRole === 'runner') {
       fetchWidgetData();
     }
     // eslint-disable-next-line
@@ -523,7 +523,7 @@ function App() {
     setLoading(true);
     // Fetch data directly with the new season value to avoid stale closure
     const runnerEmail = selectedRunner || email;
-    if (userRole === 'athlete' || runnerEmail) {
+    if (userRole === 'runner' || runnerEmail) {
       fetchWidgetDataForRunnerWithSeason(runnerEmail, newSeason);
     }
   };
