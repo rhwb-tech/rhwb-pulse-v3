@@ -1,2 +1,2 @@
 // User role types for authentication and filtering
-export type UserRole = 'athlete' | 'coach' | 'admin' | 'hybrid';
+export type UserRole = 'runner' | 'coach' | 'admin' | 'hybrid';
