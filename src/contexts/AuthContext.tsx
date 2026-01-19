@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Session } from '@supabase/supabase-js';
 import { supabase, supabaseValidation } from '../components/supabaseClient';
 import { UserRole } from '../types/user';
-import { useLocation } from 'react-router-dom';
 
 interface AuthUser {
   email: string;
@@ -32,17 +31,28 @@ interface AuthAuditLog {
   value_label?: string;
 }
 
-// Helper to log authentication events
+// Helper to log authentication events (non-blocking with timeout)
 const logAuthEvent = async (logEntry: AuthAuditLog): Promise<void> => {
   try {
-    await supabase
+    // Use timeout to prevent hanging - logging should not block auth flow
+    const logTimeout = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        console.log('[AUTH] Log event timed out (non-critical)');
+        resolve();
+      }, 2000);
+    });
+
+    const logPromise = supabaseValidation
       .from('pulse_interactions')
       .insert({
         email_id: logEntry.email_id,
         event_name: logEntry.event_name,
         value_text: logEntry.value_text,
         value_label: logEntry.value_label || null
-      });
+      })
+      .then(() => {});
+
+    await Promise.race([logPromise, logTimeout]);
   } catch (err) {
     console.error('Failed to log auth event:', err);
   }
@@ -51,9 +61,17 @@ const logAuthEvent = async (logEntry: AuthAuditLog): Promise<void> => {
 // Cache for validation requests to prevent duplicate simultaneous calls
 const validationCache = new Map<string, Promise<any>>();
 
-// Persistent cache for validation results (5 minute expiry)
+// Session storage keys for role caching (Phase 1: coach-portal pattern)
+const SESSION_KEYS = {
+  USER_ROLE: 'rhwb-pulse-session-user-role',
+  USER_EMAIL: 'rhwb-pulse-session-user-email',
+  SESSION_START: 'rhwb-pulse-session-start'
+};
+
+// Persistent cache for validation results
 const VALIDATION_CACHE_KEY = 'rhwb-pulse-validation-cache';
-const VALIDATION_CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const VALIDATION_CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes (for fresh queries)
+const VALIDATION_CACHE_SESSION_RESTORE_MS = 30 * 60 * 1000; // 30 minutes (for session restoration)
 
 interface CachedValidation {
   email: string;
@@ -62,21 +80,23 @@ interface CachedValidation {
   timestamp: number;
 }
 
-const getCachedValidation = (email: string): CachedValidation | null => {
+const getCachedValidation = (email: string, isSessionRestore: boolean = false): CachedValidation | null => {
   try {
     const cached = localStorage.getItem(VALIDATION_CACHE_KEY);
     if (!cached) return null;
 
     const validation: CachedValidation = JSON.parse(cached);
 
-    // Check if cache is for the same email and not expired
+    // Check if cache is for the same email
     if (validation.email === email.toLowerCase()) {
       const age = Date.now() - validation.timestamp;
-      if (age < VALIDATION_CACHE_EXPIRY_MS) {
-        console.log(`[AUTH] Using cached validation (age: ${Math.round(age / 1000)}s)`);
+      const expiryMs = isSessionRestore ? VALIDATION_CACHE_SESSION_RESTORE_MS : VALIDATION_CACHE_EXPIRY_MS;
+      
+      if (age < expiryMs) {
+        console.log(`[AUTH] Using cached validation (age: ${Math.round(age / 1000)}s, session restore: ${isSessionRestore})`);
         return validation;
       } else {
-        console.log(`[AUTH] Cached validation expired (age: ${Math.round(age / 1000)}s)`);
+        console.log(`[AUTH] Cached validation expired (age: ${Math.round(age / 1000)}s, max: ${Math.round(expiryMs / 1000)}s)`);
       }
     }
   } catch (err) {
@@ -109,15 +129,74 @@ const clearCachedValidation = (): void => {
   }
 };
 
+// Email-based role determination (Phase 2: fallback for timeouts)
+const determineRoleFromEmail = (email: string): UserRole => {
+  const lowercaseEmail = email.toLowerCase();
+
+  // Check email patterns
+  if (lowercaseEmail.includes('@admin') || lowercaseEmail.endsWith('-admin@')) {
+    return 'admin';
+  }
+  if (lowercaseEmail.includes('@coach') || lowercaseEmail.endsWith('-coach@')) {
+    return 'coach';
+  }
+  if (lowercaseEmail.includes('@hybrid') || lowercaseEmail.endsWith('-hybrid@')) {
+    return 'hybrid';
+  }
+
+  // Default to runner
+  return 'runner';
+};
+
+// Session storage helper functions (Phase 1: coach-portal pattern)
+const getSessionUserRole = (email: string): { role: UserRole; fromSession: boolean } | null => {
+  try {
+    const sessionEmail = sessionStorage.getItem(SESSION_KEYS.USER_EMAIL);
+    const sessionRole = sessionStorage.getItem(SESSION_KEYS.USER_ROLE);
+    const sessionStart = sessionStorage.getItem(SESSION_KEYS.SESSION_START);
+
+    if (sessionEmail === email.toLowerCase() && sessionRole && sessionStart) {
+      console.log('[AUTH] Found role in session cache:', sessionRole);
+      return { role: sessionRole as UserRole, fromSession: true };
+    }
+    return null;
+  } catch (error) {
+    console.error('[AUTH] Error reading session role:', error);
+    return null;
+  }
+};
+
+const saveSessionUserRole = (email: string, role: UserRole): void => {
+  try {
+    sessionStorage.setItem(SESSION_KEYS.USER_EMAIL, email.toLowerCase());
+    sessionStorage.setItem(SESSION_KEYS.USER_ROLE, role);
+    sessionStorage.setItem(SESSION_KEYS.SESSION_START, Date.now().toString());
+    console.log('[AUTH] Saved role to session cache:', role);
+  } catch (error) {
+    console.error('[AUTH] Error saving session role:', error);
+  }
+};
+
+const clearSessionUserRole = (): void => {
+  try {
+    sessionStorage.removeItem(SESSION_KEYS.USER_EMAIL);
+    sessionStorage.removeItem(SESSION_KEYS.USER_ROLE);
+    sessionStorage.removeItem(SESSION_KEYS.SESSION_START);
+    console.log('[AUTH] Cleared session role cache');
+  } catch (error) {
+    console.error('[AUTH] Error clearing session role:', error);
+  }
+};
+
 // Helper function to validate email against v_pulse_roles table
-const validateEmailAccess = async (email: string, retryCount = 0): Promise<{
+const validateEmailAccess = async (email: string, retryCount = 0, isSessionRestore: boolean = false): Promise<{
   isValid: boolean;
   role?: UserRole;
   fullName?: string;
   error?: string;
   errorType?: 'config' | 'connection' | 'timeout' | 'unauthorized' | 'not_found';
 }> => {
-  const cacheKey = `${email.toLowerCase()}-${retryCount}`;
+  const cacheKey = `${email.toLowerCase()}-${retryCount}-${isSessionRestore ? 'restore' : 'normal'}`;
 
   // Check if there's already a pending validation for this email
   if (validationCache.has(cacheKey)) {
@@ -128,7 +207,7 @@ const validateEmailAccess = async (email: string, retryCount = 0): Promise<{
   // Create the validation promise
   const validationPromise = (async () => {
     try {
-      return await performValidation(email, retryCount);
+      return await performValidation(email, retryCount, isSessionRestore);
     } finally {
       // Remove from cache after completion (success or failure)
       validationCache.delete(cacheKey);
@@ -141,7 +220,7 @@ const validateEmailAccess = async (email: string, retryCount = 0): Promise<{
 };
 
 // Internal validation logic
-const performValidation = async (email: string, retryCount: number): Promise<{
+const performValidation = async (email: string, retryCount: number, isSessionRestore: boolean = false): Promise<{
   isValid: boolean;
   role?: UserRole;
   fullName?: string;
@@ -149,7 +228,20 @@ const performValidation = async (email: string, retryCount: number): Promise<{
   errorType?: 'config' | 'connection' | 'timeout' | 'unauthorized' | 'not_found';
 }> => {
   try {
-    // Step 0: Check persistent cache first (only on first attempt)
+    // Step 0a: Check session cache FIRST (cache-first approach from coach-portal)
+    if (retryCount === 0) {
+      const sessionRole = getSessionUserRole(email);
+      if (sessionRole) {
+        console.log('[AUTH] Using cached role from session:', sessionRole.role);
+        return {
+          isValid: true,
+          role: sessionRole.role,
+          fromSession: true
+        } as any; // Add fromSession flag for tracking
+      }
+    }
+
+    // Step 0b: Check persistent cache (only on first attempt)
     if (retryCount === 0) {
       const cached = getCachedValidation(email);
       if (cached) {
@@ -194,28 +286,34 @@ const performValidation = async (email: string, retryCount: number): Promise<{
       };
     }
 
-    // Step 2: Query user role from database with timeout (5s)
-    console.log(`[AUTH] Starting validation for: ${email} (attempt ${retryCount + 1})`);
+    // Step 2: Query user role from database with timeout
+    // Phase 1: Reduced timeout to 3s (coach-portal pattern)
+    // Use slightly longer timeout for session restoration (5s) vs normal queries (3s)
+    const queryTimeout = isSessionRestore ? 5000 : 3000;
+    console.log(`[AUTH] Starting validation for: ${email} (attempt ${retryCount + 1}, session restore: ${isSessionRestore}, timeout: ${queryTimeout}ms)`);
     const startTime = Date.now();
 
     // Try to get the current session first to trigger any initialization (with short timeout)
-    try {
-      console.log('[AUTH] Pre-checking session before query...');
-      const sessionCheckTimeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('Session check timeout')), 2000);
-      });
-      await Promise.race([
-        supabaseValidation.auth.getSession(),
-        sessionCheckTimeout
-      ]).catch(() => {
-        console.log('[AUTH] Session check timed out or failed, proceeding anyway');
-      });
-    } catch (err) {
-      console.log('[AUTH] Session pre-check error (continuing):', err);
+    // Skip this for session restore to avoid double session checks
+    if (!isSessionRestore) {
+      try {
+        console.log('[AUTH] Pre-checking session before query...');
+        const sessionCheckTimeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Session check timeout')), 2000);
+        });
+        await Promise.race([
+          supabaseValidation.auth.getSession(),
+          sessionCheckTimeout
+        ]).catch(() => {
+          console.log('[AUTH] Session check timed out or failed, proceeding anyway');
+        });
+      } catch (err) {
+        console.log('[AUTH] Session pre-check error (continuing):', err);
+      }
     }
 
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Database query timeout')), 5000);
+      setTimeout(() => reject(new Error('Database query timeout')), queryTimeout);
     });
 
     console.log(`[AUTH] Executing Supabase query for: ${email}`);
@@ -269,24 +367,29 @@ const performValidation = async (email: string, retryCount: number): Promise<{
       }
 
       if (error.message?.includes('timeout') || error.code === 'TIMEOUT') {
-        // Retry logic for timeouts (max 2 retries)
-        if (retryCount < 2) {
-          console.log(`Retrying validation for ${email}, attempt ${retryCount + 1}/2`);
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
-          return validateEmailAccess(email, retryCount + 1);
-        }
+        // Phase 2: No retry logic - use email-based fallback instead (coach-portal pattern)
+        console.log(`[AUTH] Query timeout, using email-based fallback for: ${email}`);
+
+        // Determine role from email pattern as fallback
+        const fallbackRole = determineRoleFromEmail(email);
+
+        // Save fallback role to cache so subsequent requests are instant
+        saveSessionUserRole(email, fallbackRole);
+        setCachedValidation(email, fallbackRole, email);
 
         await logAuthEvent({
           email_id: email,
           event_name: 'auth_attempt',
-          value_text: 'failed',
-          value_label: `query_timeout_after_${retryCount + 1}_attempts`
+          value_text: 'timeout_fallback',
+          value_label: `fallback_role_${fallbackRole}`
         });
+
         return {
-          isValid: false,
-          error: 'Database connection timeout after multiple attempts. Please check your internet connection and try again.',
-          errorType: 'timeout'
-        };
+          isValid: true,
+          role: fallbackRole,
+          fullName: email,
+          fromFallback: true
+        } as any;
       }
 
       await logAuthEvent({
@@ -322,10 +425,10 @@ const performValidation = async (email: string, retryCount: number): Promise<{
       'admin': 'admin',
       'coach': 'coach',
       'hybrid': 'hybrid',
-      'athlete': 'athlete'
+      'runner': 'runner'
     };
 
-    const role = roleMapping[data.role] || 'athlete';
+    const role = roleMapping[data.role] || 'runner';
 
     // Success - log authorization
     await logAuthEvent({
@@ -335,8 +438,9 @@ const performValidation = async (email: string, retryCount: number): Promise<{
       value_label: `role_${role}`
     });
 
-    // Cache the validation result
-    setCachedValidation(email, role, data.full_name);
+    // Cache the validation result (both session and persistent)
+    saveSessionUserRole(email, role); // Phase 1: Session cache (fastest)
+    setCachedValidation(email, role, data.full_name); // Persistent cache (localStorage)
 
     return { isValid: true, role, fullName: data.full_name };
 
@@ -360,51 +464,51 @@ const performValidation = async (email: string, retryCount: number): Promise<{
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const location = useLocation();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEmailSent, setIsEmailSent] = useState(false);
-  const currentOverrideEmailRef = React.useRef<string | null>(null);
-  const overrideAbortControllerRef = React.useRef<AbortController | null>(null);
-  const pendingOverrideEmailRef = React.useRef<string | null>(null);
   const isLoggingOutRef = React.useRef<boolean>(false);
+  const isProcessingAuthChangeRef = React.useRef<boolean>(false); // Phase 3: Request deduplication
 
   // Initialize auth state
   useEffect(() => {
     console.log('[AUTH INIT] Initial auth effect running');
 
-    // Check for email parameter in URL and store it (will be used after session is checked)
-    const urlParams = new URLSearchParams(window.location.search);
-    const overrideEmail = urlParams.get('email');
-    if (overrideEmail) {
-      pendingOverrideEmailRef.current = overrideEmail;
-      console.log('[AUTH INIT] Stored pending email for after authentication:', overrideEmail);
-    }
-
     // Get initial session
     const getInitialSession = async () => {
       try {
         console.log('[AUTH INIT] Checking for existing session...');
-        const { data: { session } } = await supabase.auth.getSession();
+
+        // Add timeout protection to getSession - stale sessions can cause hangs
+        const sessionTimeout = new Promise<{ data: { session: Session | null } }>((resolve) => {
+          setTimeout(() => {
+            console.log('[AUTH INIT] Session check timed out after 5s');
+            resolve({ data: { session: null } });
+          }, 5000);
+        });
+
+        const { data: { session } } = await Promise.race([
+          supabase.auth.getSession(),
+          sessionTimeout
+        ]);
+
         console.log('[AUTH INIT] Session found:', session ? 'YES' : 'NO');
         setSession(session);
 
         if (session?.user) {
-          // Check if there's a URL override parameter
-          const urlParams = new URLSearchParams(window.location.search);
-          const overrideEmail = urlParams.get('email') || pendingOverrideEmailRef.current;
-
-          if (overrideEmail) {
-            console.log(`[AUTH INIT] URL override detected (${overrideEmail}), skipping auth user validation`);
-            // Don't validate authenticated user, let URL override effect handle it
-            setIsLoading(false);
+          // Skip if auth state change handler is already processing (prevents race condition)
+          if (isProcessingAuthChangeRef.current) {
+            console.log('[AUTH INIT] Auth change already in progress, skipping initial session validation');
             return;
           }
 
-          console.log('[AUTH INIT] Validating session user:', session.user.email);
-          // Load authenticated user (override will be handled by separate useEffect)
-          const validation = await validateEmailAccess(session.user.email!);
+          console.log('[AUTH INIT] Validating session user (session restore):', session.user.email);
+
+          // ALWAYS validate authenticated user first (URL override will be handled by separate useEffect)
+          // Pass isSessionRestore=true to use longer cache and timeout
+          const validation = await validateEmailAccess(session.user.email!, 0, true);
+
           if (validation.isValid && validation.role) {
             const authUser: AuthUser = {
               email: session.user.email!,
@@ -413,6 +517,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               id: session.user.id
             };
             setUser(authUser);
+            setIsLoading(false);
 
             await logAuthEvent({
               email_id: session.user.email!,
@@ -423,10 +528,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           } else {
             // Check if it's a timeout error - don't sign out, just show error
             if (validation.errorType === 'timeout') {
-              console.error('Session validation timeout - keeping session but showing error');
-              // Keep session, user will see loading/error state
+              console.error('[AUTH INIT] Session validation timeout - keeping session');
               setUser(null);
-              // Don't sign out on timeout
+              setIsLoading(false);
             } else {
               // User is authenticated but not authorized - log them out
               await logAuthEvent({
@@ -437,17 +541,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               });
               await supabase.auth.signOut();
               setUser(null);
+              setIsLoading(false);
             }
           }
         } else {
           // No session - user must authenticate
           setUser(null);
+          setIsLoading(false);
         }
       } catch (error) {
-        console.error('Error during initial session load:', error);
+        console.error('[AUTH INIT] Error during initial session load:', error);
         setUser(null);
         setSession(null);
-      } finally {
         setIsLoading(false);
       }
     };
@@ -459,12 +564,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       async (event, session) => {
         console.log(`[AUTH STATE CHANGE] Event: ${event}, Has session: ${!!session}, Current user: ${!!user}`);
 
+        // Phase 3: Event filtering - only process specific events
+        const allowedEvents = ['SIGNED_IN', 'SIGNED_OUT', 'TOKEN_REFRESHED'];
+        if (!allowedEvents.includes(event)) {
+          console.log(`[AUTH STATE CHANGE] Ignoring event: ${event} (not in allowed list)`);
+          return;
+        }
+
+        // Phase 3: Request deduplication - skip if already processing
+        if (isProcessingAuthChangeRef.current) {
+          console.log('[AUTH STATE CHANGE] Already processing auth change, skipping duplicate');
+          return;
+        }
+
         // Skip all processing if logout is in progress
         if (isLoggingOutRef.current) {
           console.log('[AUTH STATE CHANGE] Logout in progress, skipping validation');
-          setSession(null);
-          setUser(null);
-          setIsLoading(false);
+          // Don't update state during logout - let logout function handle it
           return;
         }
 
@@ -475,26 +591,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // We'll process it but with caution
         }
 
+        // Phase 3: Set processing flag
+        isProcessingAuthChangeRef.current = true;
+
         try {
           setSession(session);
 
           if (session?.user) {
-            // Check if there's a URL override parameter
-            const urlParams = new URLSearchParams(window.location.search);
-            const overrideEmail = urlParams.get('email') || pendingOverrideEmailRef.current;
-
-            if (overrideEmail) {
-              console.log(`[AUTH STATE CHANGE] URL override detected (${overrideEmail}), skipping auth user validation`);
-              // Don't validate authenticated user, let URL override effect handle it
-              // Just store the pending override and return
-              pendingOverrideEmailRef.current = overrideEmail;
-              setIsLoading(false);
-              return;
-            }
-
             console.log(`[AUTH STATE CHANGE] Validating user: ${session.user.email}`);
-            // Load authenticated user (override will be handled by separate useEffect)
-            const validation = await validateEmailAccess(session.user.email!);
+
+            // ALWAYS validate authenticated user first (URL override handled by separate useEffect)
+            const isSessionRestore = event === 'SIGNED_IN' && !user;
+            const validation = await validateEmailAccess(session.user.email!, 0, isSessionRestore);
+
             if (validation.isValid && validation.role) {
               const authUser: AuthUser = {
                 email: session.user.email!,
@@ -503,6 +612,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 id: session.user.id
               };
               setUser(authUser);
+              setIsLoading(false);
+
+              console.log(`[AUTH STATE CHANGE] User set successfully: ${authUser.email} (${authUser.role})`);
 
               await logAuthEvent({
                 email_id: session.user.email!,
@@ -510,23 +622,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 value_text: 'success',
                 value_label: `role_${validation.role}`
               });
-
-              // Preserve email parameter in URL if it exists (override will be applied by separate useEffect)
-              const urlParams = new URLSearchParams(window.location.search);
-              const overrideEmail = urlParams.get('email') || pendingOverrideEmailRef.current;
-              if (overrideEmail && !urlParams.has('email')) {
-                // Restore URL parameter if it was stored in pending
-                const newUrl = new URL(window.location.href);
-                newUrl.searchParams.set('email', overrideEmail);
-                window.history.replaceState({}, '', newUrl.toString());
-                pendingOverrideEmailRef.current = null;
-              }
             } else {
               // Check if it's a timeout error - don't sign out, just show error
               if (validation.errorType === 'timeout') {
-                console.error('Auth state change validation timeout - keeping session');
+                console.error('[AUTH STATE CHANGE] Validation timeout - keeping session');
                 setUser(null);
-                // Don't sign out on timeout, user can retry
+                setIsLoading(false);
               } else {
                 // Not authorized - sign out
                 await logAuthEvent({
@@ -537,25 +638,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 });
                 await supabase.auth.signOut();
                 setUser(null);
+                setIsLoading(false);
               }
             }
           } else {
             // No session - user must authenticate
-            // Check for email parameter and store it for after authentication
-            const urlParams = new URLSearchParams(window.location.search);
-            const overrideEmail = urlParams.get('email');
-            if (overrideEmail) {
-              pendingOverrideEmailRef.current = overrideEmail;
-              console.log('URL Override - Stored pending email for after authentication:', overrideEmail);
-            }
             setUser(null);
+            setIsLoading(false);
           }
         } catch (error) {
-          console.error('Error in auth state change handler:', error);
+          console.error('[AUTH STATE CHANGE] Error in handler:', error);
           setUser(null);
           setSession(null);
-        } finally {
           setIsLoading(false);
+        } finally {
+          // Phase 3: Clear processing flag
+          isProcessingAuthChangeRef.current = false;
         }
       }
     );
@@ -564,189 +662,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle URL parameter changes for email override (only when session exists)
-  useEffect(() => {
-    console.log('[URL OVERRIDE EFFECT] Running, has session:', !!session?.user, 'location.search:', location.search);
-
-    // Skip if logout is in progress
-    if (isLoggingOutRef.current) {
-      console.log('[URL OVERRIDE EFFECT] Logout in progress, skipping');
-      return;
-    }
-
-    // If no session, check for email parameter and store it for after authentication
-    if (!session?.user) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const overrideEmail = urlParams.get('email');
-      if (overrideEmail) {
-        pendingOverrideEmailRef.current = overrideEmail;
-        console.log('[URL OVERRIDE EFFECT] No session, stored pending email:', overrideEmail);
-      }
-      setIsLoading(false);
-      return;
-    }
-
-    const handleOverrideChange = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      let overrideEmail = urlParams.get('email');
-      console.log('[URL OVERRIDE] Processing override email:', overrideEmail || 'none');
-      
-      // If no email in URL but we have a pending one, restore it to URL
-      if (!overrideEmail && pendingOverrideEmailRef.current) {
-        overrideEmail = pendingOverrideEmailRef.current;
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('email', overrideEmail);
-        window.history.replaceState({}, '', newUrl.toString());
-        pendingOverrideEmailRef.current = null;
-      }
-
-      // Skip if override email hasn't changed
-      if (overrideEmail === currentOverrideEmailRef.current) {
-        setIsLoading(false);
-        return;
-      }
-
-      // Cancel any pending override query
-      if (overrideAbortControllerRef.current) {
-        overrideAbortControllerRef.current.abort();
-      }
-
-      // Create new abort controller for this query
-      const abortController = new AbortController();
-      overrideAbortControllerRef.current = abortController;
-
-      currentOverrideEmailRef.current = overrideEmail;
-      setIsLoading(true);
-
-      console.log('URL Override - Processing email:', overrideEmail || 'none');
-
-      try {
-        if (abortController.signal.aborted) {
-          console.log('URL Override - Aborted before processing');
-          return;
-        }
-
-        if (overrideEmail) {
-          console.log('URL Override - Validating override email:', overrideEmail);
-          // Validate and load override user
-          const validation = await validateEmailAccess(overrideEmail);
-
-          if (abortController.signal.aborted) {
-            console.log('URL Override - Aborted after validation');
-            return;
-          }
-
-          if (validation.isValid && validation.role) {
-            console.log('URL Override - Valid override, setting user to:', overrideEmail);
-            const authUser: AuthUser = {
-              email: overrideEmail,
-              role: validation.role,
-              name: validation.fullName || overrideEmail,
-              id: session.user.id
-            };
-            setUser(authUser);
-
-            await logAuthEvent({
-              email_id: session.user.email!,
-              event_name: 'auth_override_change',
-              value_text: 'success',
-              value_label: `viewing_${overrideEmail}_as_${validation.role}`
-            });
-          } else {
-            console.warn('URL Override - Invalid override email, reverting to authenticated user');
-            // Invalid override email - revert to authenticated user
-            const validation = await validateEmailAccess(session.user.email!);
-
-            if (abortController.signal.aborted) {
-              console.log('URL Override - Aborted during revert');
-              return;
-            }
-
-            if (validation.isValid && validation.role) {
-              const authUser: AuthUser = {
-                email: session.user.email!,
-                role: validation.role,
-                name: validation.fullName || session.user.user_metadata?.name || session.user.email,
-                id: session.user.id
-              };
-              setUser(authUser);
-            } else {
-              console.error('URL Override - Auth user validation failed, this should not happen');
-              setIsLoading(false);
-            }
-          }
-        } else {
-          console.log('URL Override - No override, using authenticated user');
-          // No override - use authenticated user
-          const validation = await validateEmailAccess(session.user.email!);
-
-          if (abortController.signal.aborted) {
-            console.log('URL Override - Aborted during auth user validation');
-            return;
-          }
-
-          if (validation.isValid && validation.role) {
-            const authUser: AuthUser = {
-              email: session.user.email!,
-              role: validation.role,
-              name: validation.fullName || session.user.user_metadata?.name || session.user.email,
-              id: session.user.id
-            };
-            setUser(authUser);
-          } else {
-            console.error('URL Override - Auth user validation failed');
-            setIsLoading(false);
-          }
-        }
-      } catch (error) {
-        if (abortController.signal.aborted) {
-          console.log('Override query cancelled - new query started');
-          return;
-        }
-        console.error('Error handling override change:', error);
-        // Ensure loading state is cleared on error
-        setIsLoading(false);
-      } finally {
-        if (!abortController.signal.aborted) {
-          console.log('URL Override - Complete, setting isLoading to false');
-          setIsLoading(false);
-        } else {
-          console.log('URL Override - Aborted, not clearing loading state');
-        }
-      }
-    };
-
-    // Debounce to prevent rapid fire queries
-    const timeoutId = setTimeout(() => {
-      handleOverrideChange();
-    }, 300);
-
-    // Listen for URL changes
-    const handlePopState = () => {
-      handleOverrideChange();
-    };
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      clearTimeout(timeoutId);
-      window.removeEventListener('popstate', handlePopState);
-      if (overrideAbortControllerRef.current) {
-        overrideAbortControllerRef.current.abort();
-      }
-    };
-  }, [session, location.search]);
-
   const login = async (email: string): Promise<{ success: boolean; error?: string }> => {
     try {
       console.log('[LOGIN] Starting login for:', email);
 
-      // Clear any pending overrides from previous sessions
-      pendingOverrideEmailRef.current = null;
-      currentOverrideEmailRef.current = null;
-
       setIsLoading(true);
 
-      const validation = await validateEmailAccess(email);
+      const validation = await validateEmailAccess(email, 0, false);
 
       if (!validation.isValid) {
         await logAuthEvent({
@@ -818,31 +740,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     try {
       isLoggingOutRef.current = true;
-      console.log('[LOGOUT] Clearing all authentication state and cache');
-
-      // Clear validation cache
-      clearCachedValidation();
-
-      // Clear the email sent state
+      console.log('[LOGOUT] Starting logout - clearing all authentication state and cache');
+      
+      // Clear all state IMMEDIATELY so login screen shows right away
+      setUser(null);
+      setSession(null);
+      setIsLoading(false);
       setIsEmailSent(false);
 
-      // Clear any override email
-      currentOverrideEmailRef.current = null;
-      pendingOverrideEmailRef.current = null;
-
-      // Cancel any pending override queries
-      if (overrideAbortControllerRef.current) {
-        overrideAbortControllerRef.current.abort();
-        overrideAbortControllerRef.current = null;
-      }
-
-      // Clear URL parameters (remove email override from URL)
-      if (window.location.search) {
-        const newUrl = new URL(window.location.href);
-        newUrl.search = ''; // Clear all query parameters
-        window.history.replaceState({}, '', newUrl.toString());
-        console.log('[LOGOUT] Cleared URL parameters');
-      }
+      // Clear validation cache (both session and persistent)
+      clearSessionUserRole(); // Phase 1: Clear session cache
+      clearCachedValidation(); // Clear localStorage cache
+      validationCache.clear(); // Clear request cache
+      console.log('[LOGOUT] Cleared all validation caches');
 
       // Clear public laptop flag if set
       try {
@@ -851,42 +761,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Handle silently
       }
 
-      // Clear validation cache
-      validationCache.clear();
-      console.log('[LOGOUT] Cleared validation cache');
-
-      // Clear user and session immediately
-      setUser(null);
-      setSession(null);
-
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('[LOGOUT] Supabase sign out error:', error);
-      } else {
-        console.log('[LOGOUT] Successfully signed out');
-      }
-
-      // Clear all Supabase storage to prevent session recovery issues
+      // Clear all Supabase storage FIRST (before signOut) to prevent session recovery
       try {
-        const storage = sessionStorage.getItem('rhwb-pulse-public-laptop') === 'true' ? sessionStorage : localStorage;
-        const keysToRemove: string[] = [];
-        for (let i = 0; i < storage.length; i++) {
-          const key = storage.key(i);
-          if (key && key.startsWith('rhwb-pulse-')) {
-            keysToRemove.push(key);
+        // Clear both localStorage and sessionStorage
+        const storages = [localStorage, sessionStorage];
+        storages.forEach(storage => {
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (key && key.startsWith('rhwb-pulse-')) {
+              keysToRemove.push(key);
+            }
           }
-        }
-        keysToRemove.forEach(key => storage.removeItem(key));
-        console.log(`[LOGOUT] Cleared ${keysToRemove.length} storage keys`);
+          keysToRemove.forEach(key => storage.removeItem(key));
+          console.log(`[LOGOUT] Cleared ${keysToRemove.length} keys from ${storage === localStorage ? 'localStorage' : 'sessionStorage'}`);
+        });
       } catch (err) {
         console.error('[LOGOUT] Error clearing storage:', err);
       }
 
-      // Reset logout flag after a longer delay to ensure all auth state changes complete
-      setTimeout(() => {
-        isLoggingOutRef.current = false;
-        console.log('[LOGOUT] Logout flag reset');
-      }, 3000);
+      // Sign out from Supabase with timeout protection (non-blocking)
+      // Don't wait for this to complete - we've already cleared all state
+      // This runs in the background and won't block the logout
+      (async () => {
+        try {
+          const signOutTimeout = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Sign out timeout')), 2000);
+          });
+
+          const result = await Promise.race([
+            supabase.auth.signOut(),
+            signOutTimeout
+          ]).catch((err) => {
+            console.warn('[LOGOUT] Sign out timed out or failed (non-critical):', err);
+            return { error: err };
+          }) as { error?: any };
+
+          if (result?.error) {
+            console.error('[LOGOUT] Supabase sign out error:', result.error);
+          } else {
+            console.log('[LOGOUT] Successfully signed out from Supabase');
+          }
+        } catch (err) {
+          console.warn('[LOGOUT] Sign out error (non-critical):', err);
+        }
+      })();
+
+      // Reset logout flag immediately (don't wait for signOut to complete)
+      isLoggingOutRef.current = false;
+      console.log('[LOGOUT] Logout complete - login screen should be visible');
     } catch (error) {
       console.error('[LOGOUT] Error during logout:', error);
       isLoggingOutRef.current = false;

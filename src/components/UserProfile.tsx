@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Button,
   Box,
@@ -9,8 +9,7 @@ import {
   Card,
   IconButton,
   Container,
-  Autocomplete,
-  TextField
+  Alert
 } from '@mui/material';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import MaleIcon from '@mui/icons-material/Male';
@@ -25,6 +24,7 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import SportsIcon from '@mui/icons-material/Sports';
 import { useAuth } from '../contexts/AuthContext';
+import { useApp } from '../contexts/AppContext';
 import { supabase, supabaseValidation } from './supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
@@ -39,7 +39,8 @@ interface RunnerProfile {
   country: string;
   phone_no: string;
   dob: string;
-  referred_by: string;
+  referred_by: string | null;
+  referred_by_email_id: string | null;
   profile_picture: string | null;
 }
 
@@ -47,99 +48,130 @@ interface TimelineEntry {
   season: string;
   race_distance: string | null;
   coach: string | null;
+  coach_picture: string | null;
+  coach_profile_url: string | null;
 }
 
-interface RunnerOption {
-  runner_name: string;
-  city: string;
-}
+// Helper function to get initials from a name
+const getInitials = (name: string | null): string => {
+  if (!name) return '?';
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) {
+    return words[0].charAt(0).toUpperCase();
+  }
+  return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase();
+};
+
 
 const UserProfile: React.FC = () => {
   const { user } = useAuth();
+  const { effectiveEmail, isOverrideActive, overrideEmail } = useApp();
   const navigate = useNavigate();
   const [profileData, setProfileData] = useState<RunnerProfile | null>(null);
   const [timelineData, setTimelineData] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [runnersList, setRunnersList] = useState<RunnerOption[]>([]);
   const [referredByValue, setReferredByValue] = useState<string | null>(null);
-  const [savingReferredBy, setSavingReferredBy] = useState(false);
-  const referredByInputRef = useRef<string>('');
-  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+
+  // Use effectiveEmail (which respects override) for profile data
+  const targetEmail = effectiveEmail || user?.email || '';
 
   const fetchProfileData = useCallback(async () => {
     try {
       setLoading(true);
-      console.log('[PROFILE] Starting profile fetch for:', user?.email);
+      const userRole = user?.role;
+      console.log('[PROFILE] Starting profile fetch for:', targetEmail, 'role:', userRole);
+      if (isOverrideActive) {
+        console.log('[PROFILE] Override mode active - fetching profile for:', overrideEmail);
+      }
 
       // Add timeout protection (10 seconds)
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('Profile query timeout')), 10000);
       });
 
-      console.log('[PROFILE] Creating query...');
       const startTime = Date.now();
-      const queryPromise = supabaseValidation
+
+      // Always fetch personal details from runners_profile
+      console.log('[PROFILE] Fetching personal details from runners_profile...');
+      const profileQuery = supabaseValidation
         .from('runners_profile')
-        .select('email_id, runner_name, gender, address, zip, city, state, country, phone_no, dob, referred_by, profile_picture')
-        .eq('email_id', user?.email?.toLowerCase())
+        .select('email_id, runner_name, gender, address, zip, city, state, country, phone_no, dob, referred_by, referred_by_email_id, profile_picture')
+        .eq('email_id', targetEmail.toLowerCase())
         .single();
 
-      console.log('[PROFILE] Query created, waiting for response...');
-      const { data, error } = await Promise.race([
-        queryPromise,
+      const { data: profileData, error: profileError } = await Promise.race([
+        profileQuery,
         timeoutPromise
       ]).catch((err) => {
-        const elapsed = Date.now() - startTime;
-        console.error(`[PROFILE] Profile query failed or timed out after ${elapsed}ms:`, err);
+        console.error('[PROFILE] Profile query failed or timed out:', err);
         return { data: null, error: err };
       }) as { data: RunnerProfile | null; error: any };
 
-      const elapsed = Date.now() - startTime;
-      console.log(`[PROFILE] Query completed in ${elapsed}ms`);
+      const profileElapsed = Date.now() - startTime;
+      console.log(`[PROFILE] runners_profile query completed in ${profileElapsed}ms`);
 
-      if (error) {
-        console.error('[PROFILE] Supabase client error, trying direct fetch fallback...');
-
-        // Fallback: Try direct REST API call
-        try {
-          const directStartTime = Date.now();
-          const url = `${process.env.REACT_APP_SUPABASE_URL}/rest/v1/runners_profile?email_id=eq.${encodeURIComponent(user?.email?.toLowerCase() || '')}`;
-          const response = await fetch(url, {
-            headers: {
-              'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY || '',
-              'Authorization': `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY || ''}`,
-            },
-          });
-
-          const directElapsed = Date.now() - directStartTime;
-          console.log(`[PROFILE] Direct fetch completed in ${directElapsed}ms`);
-
-          if (response.ok) {
-            const jsonData = await response.json();
-            if (jsonData && jsonData.length > 0) {
-              console.log('[PROFILE] Direct fetch succeeded, using data');
-              setProfileData(jsonData[0]);
-              return;
-            }
-          }
-        } catch (directError) {
-          console.error('[PROFILE] Direct fetch also failed:', directError);
-        }
-
-        console.error('Error fetching profile:', error);
-        return;
+      if (profileError) {
+        console.error('[PROFILE] Error fetching from runners_profile:', profileError);
       }
 
-      console.log('Fetched profile data:', data);
-      console.log('Profile picture URL from DB:', data?.profile_picture);
-      setProfileData(data);
+      // For non-runner roles, also fetch profile picture from role-specific table
+      let roleProfilePicture: string | null = null;
+      if (userRole === 'admin' || userRole === 'coach' || userRole === 'hybrid') {
+        const roleTable = userRole === 'admin' ? 'rhwb_admin' : 'rhwb_coaches';
+        const selectField = userRole === 'admin' ? 'profile_picture' : 'profile_picture';
+
+        console.log(`[PROFILE] Fetching profile picture from ${roleTable}...`);
+        const roleStartTime = Date.now();
+
+        const { data: roleData, error: roleError } = await supabaseValidation
+          .from(roleTable)
+          .select(selectField)
+          .eq('email_id', targetEmail.toLowerCase())
+          .single();
+
+        const roleElapsed = Date.now() - roleStartTime;
+        console.log(`[PROFILE] ${roleTable} query completed in ${roleElapsed}ms`);
+
+        if (!roleError && roleData) {
+          roleProfilePicture = roleData.profile_picture;
+          console.log(`[PROFILE] Profile picture from ${roleTable}:`, roleProfilePicture);
+        } else if (roleError) {
+          console.log(`[PROFILE] No record in ${roleTable} for this user, using runners_profile picture`);
+        }
+      }
+
+      // Build final profile data
+      const finalProfileData: RunnerProfile = profileData || {
+        email_id: targetEmail,
+        runner_name: '',
+        gender: '',
+        address: '',
+        zip: '',
+        city: '',
+        state: '',
+        country: '',
+        phone_no: '',
+        dob: '',
+        referred_by: null,
+        referred_by_email_id: null,
+        profile_picture: null
+      };
+
+      // Override profile picture with role-specific one if available
+      if (roleProfilePicture) {
+        finalProfileData.profile_picture = roleProfilePicture;
+      }
+
+      console.log('Final profile data:', finalProfileData);
+      console.log('Profile picture URL:', finalProfileData.profile_picture);
+      setProfileData(finalProfileData);
     } catch (err) {
       console.error('Error loading profile:', err);
     } finally {
       setLoading(false);
     }
-  }, [user?.email]);
+  }, [targetEmail, isOverrideActive, overrideEmail, user?.role]);
 
   const fetchTimelineData = useCallback(async () => {
     try {
@@ -151,7 +183,7 @@ const UserProfile: React.FC = () => {
       const queryPromise = supabaseValidation
         .from('runner_season_info')
         .select('season, race_distance, coach')
-        .eq('email_id', user?.email?.toLowerCase())
+        .eq('email_id', targetEmail.toLowerCase())
         .order('season_no', { ascending: false });
 
       const { data, error } = await Promise.race([
@@ -160,7 +192,7 @@ const UserProfile: React.FC = () => {
       ]).catch((err) => {
         console.error('Timeline query failed or timed out:', err);
         return { data: null, error: err };
-      }) as { data: TimelineEntry[] | null; error: any };
+      }) as { data: Array<{ season: string; race_distance: string | null; coach: string | null }> | null; error: any };
 
       if (error) {
         console.error('Error fetching timeline:', error);
@@ -168,11 +200,49 @@ const UserProfile: React.FC = () => {
       }
 
       console.log('Fetched timeline data:', data);
-      setTimelineData(data || []);
+
+      if (!data || data.length === 0) {
+        setTimelineData([]);
+        return;
+      }
+
+      // Get unique coach names to fetch their profile pictures
+      const uniqueCoaches = Array.from(new Set(data.map(entry => entry.coach).filter(Boolean))) as string[];
+      console.log('[PROFILE] Fetching pictures for coaches:', uniqueCoaches);
+
+      // Fetch coach profile pictures and profile URLs from rhwb_coaches table
+      let coachPictures: Record<string, string | null> = {};
+      let coachProfileUrls: Record<string, string | null> = {};
+      if (uniqueCoaches.length > 0) {
+        const { data: coachData, error: coachError } = await supabaseValidation
+          .from('rhwb_coaches')
+          .select('coach, profile_picture, profile_url')
+          .in('coach', uniqueCoaches);
+
+        if (coachError) {
+          console.error('[PROFILE] Error fetching coach data:', coachError);
+        } else if (coachData) {
+          coachData.forEach((coach: { coach: string; profile_picture: string | null; profile_url: string | null }) => {
+            coachPictures[coach.coach] = coach.profile_picture;
+            coachProfileUrls[coach.coach] = coach.profile_url;
+          });
+          console.log('[PROFILE] Loaded coach pictures:', coachPictures);
+          console.log('[PROFILE] Loaded coach profile URLs:', coachProfileUrls);
+        }
+      }
+
+      // Merge coach pictures and profile URLs into timeline data
+      const timelineWithCoachPictures: TimelineEntry[] = data.map(entry => ({
+        ...entry,
+        coach_picture: entry.coach ? (coachPictures[entry.coach] || null) : null,
+        coach_profile_url: entry.coach ? (coachProfileUrls[entry.coach] || null) : null
+      }));
+
+      setTimelineData(timelineWithCoachPictures);
     } catch (err) {
       console.error('Error loading timeline:', err);
     }
-  }, [user?.email]);
+  }, [targetEmail]);
 
   const capitalizeWords = (text: string | null | undefined): string => {
     if (!text) return '';
@@ -182,54 +252,61 @@ const UserProfile: React.FC = () => {
       .join(' ');
   };
 
-  const fetchRunnersList = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('runners_profile')
-        .select('runner_name, city')
-        .order('runner_name', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching runners list:', error);
-        return;
-      }
-
-      // Filter to get only distinct runner names
-      const seenNames = new Set<string>();
-      const distinctRunners = (data || []).filter((runner) => {
-        if (!runner.runner_name || seenNames.has(runner.runner_name)) {
-          return false;
-        }
-        seenNames.add(runner.runner_name);
-        return true;
-      });
-
-      setRunnersList(distinctRunners);
-    } catch (err) {
-      console.error('Error loading runners list:', err);
-    }
-  }, []);
 
   useEffect(() => {
-    if (user?.email) {
+    // Use targetEmail which respects override mode
+    if (targetEmail) {
       fetchProfileData();
       fetchTimelineData();
-      fetchRunnersList();
     }
-  }, [user?.email, fetchProfileData, fetchTimelineData, fetchRunnersList]);
+  }, [targetEmail, fetchProfileData, fetchTimelineData]);
 
+  // Load referred_by_email_id when profile loads (read-only display)
   useEffect(() => {
-    if (profileData?.referred_by) {
-      // Capitalize the existing value when loading
-      setReferredByValue(capitalizeWords(profileData.referred_by));
-    } else {
-      setReferredByValue(null);
-    }
-  }, [profileData?.referred_by]);
+    const loadReferredByData = async () => {
+      // Load the saved referred_by_email_id
+      if (profileData?.referred_by_email_id) {
+        try {
+          // Fetch the runner name for display
+          const { data, error } = await supabaseValidation
+            .from('runners_profile')
+            .select('runner_name, city')
+            .eq('email_id', profileData.referred_by_email_id.toLowerCase())
+            .single();
+
+          if (!error && data) {
+            const displayName = `${capitalizeWords(data.runner_name)}${data.city ? `, ${capitalizeWords(data.city)}` : ''}`;
+            setReferredByValue(displayName);
+          } else {
+            // If lookup fails, show the email
+            setReferredByValue(profileData.referred_by_email_id);
+          }
+        } catch (err) {
+          console.error('[PROFILE] Error fetching referred by name:', err);
+          setReferredByValue(profileData.referred_by_email_id);
+        }
+      } else {
+        // No referred_by_email_id, check if there's a legacy referred_by value
+        if (profileData?.referred_by) {
+          setReferredByValue(capitalizeWords(profileData.referred_by));
+        } else {
+          setReferredByValue(null);
+        }
+      }
+    };
+
+    loadReferredByData();
+  }, [profileData?.referred_by_email_id, profileData?.referred_by]);
 
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user?.email) return;
+
+    // Block avatar upload in override mode (admin viewing another user's profile)
+    if (isOverrideActive) {
+      alert('Cannot modify profile picture when viewing another user\'s profile');
+      return;
+    }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -272,11 +349,24 @@ const UserProfile: React.FC = () => {
       console.log('Upload successful! File path:', fileName);
       console.log('Public URL:', publicUrl);
 
-      // Update database with new profile picture URL
+      // Update database with new profile picture URL based on user role
+      const userRole = user?.role;
+      let tableName: string;
+
+      if (userRole === 'admin') {
+        tableName = 'rhwb_admin';
+      } else if (userRole === 'coach' || userRole === 'hybrid') {
+        tableName = 'rhwb_coaches';
+      } else {
+        tableName = 'runners_profile';
+      }
+
+      console.log(`[PROFILE] Updating profile_picture in ${tableName} for:`, user.email.toLowerCase());
       const { error: updateError } = await supabase
-        .from('runners_profile')
+        .from(tableName)
         .update({ profile_picture: publicUrl })
         .eq('email_id', user.email.toLowerCase());
+      console.log('[PROFILE] Profile picture update result:', { updateError });
 
       if (updateError) {
         console.error('Database update error:', updateError);
@@ -304,40 +394,6 @@ const UserProfile: React.FC = () => {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  const handleReferredByChange = async (newValue: string | null) => {
-    if (!user?.email) return;
-
-    // Capitalize the value before saving
-    const capitalizedValue = newValue ? capitalizeWords(newValue) : null;
-    setReferredByValue(capitalizedValue);
-    setSavingReferredBy(true);
-
-    try {
-      const { error } = await supabase
-        .from('runners_profile')
-        .update({ referred_by: capitalizedValue || null })
-        .eq('email_id', user.email.toLowerCase());
-
-      if (error) {
-        console.error('Error updating referred_by:', error);
-        alert('Failed to update referred by field. Please try again.');
-        // Revert to previous value on error
-        setReferredByValue(profileData?.referred_by || null);
-      } else {
-        // Update local state
-        if (profileData) {
-          setProfileData({ ...profileData, referred_by: capitalizedValue || '' });
-        }
-      }
-    } catch (err) {
-      console.error('Error updating referred_by:', err);
-      alert('An unexpected error occurred. Please try again.');
-      // Revert to previous value on error
-      setReferredByValue(profileData?.referred_by || null);
-    } finally {
-      setSavingReferredBy(false);
-    }
-  };
 
   const DetailItem = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
     <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -377,6 +433,22 @@ const UserProfile: React.FC = () => {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: '#fafafa' }}>
+      {/* Override Mode Banner */}
+      {isOverrideActive && (
+        <Alert 
+          severity="info" 
+          sx={{ 
+            borderRadius: 0,
+            '& .MuiAlert-message': { width: '100%' }
+          }}
+        >
+          <Typography variant="body2">
+            <strong>Override Mode:</strong> Viewing profile for <strong>{overrideEmail}</strong>. 
+            Profile modifications are disabled.
+          </Typography>
+        </Alert>
+      )}
+      
       {/* Hero Section with Running Theme */}
       <Box sx={{
         position: 'relative',
@@ -549,149 +621,11 @@ const UserProfile: React.FC = () => {
 
             {/* Referred By */}
             <Grid item xs={12} sm={6}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                <Box sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  bgcolor: 'rgba(24, 119, 242, 0.1)',
-                  color: '#1877F2',
-                  mr: 1.5,
-                  flexShrink: 0,
-                  fontSize: '1.1rem',
-                  mt: 1
-                }}>
-                  <PersonAddIcon />
-                </Box>
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="caption" sx={{ color: '#666', fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.3px', display: 'block', lineHeight: 1.2, mb: 0.5 }}>
-                    Referred By
-                  </Typography>
-                  <Autocomplete
-                    freeSolo
-                    open={autocompleteOpen}
-                    onOpen={() => {
-                      // Only open if user has typed something
-                      if (referredByInputRef.current.length > 0) {
-                        setAutocompleteOpen(true);
-                      }
-                    }}
-                    onClose={() => setAutocompleteOpen(false)}
-                    options={runnersList.map((runner) => ({
-                      label: `${capitalizeWords(runner.runner_name)}${runner.city ? `, ${capitalizeWords(runner.city)}` : ''}`,
-                      name: runner.runner_name
-                    }))}
-                    getOptionLabel={(option) => {
-                      if (typeof option === 'string') {
-                        return option;
-                      }
-                      return option.label;
-                    }}
-                    isOptionEqualToValue={(option, value) => {
-                      if (typeof value === 'string') {
-                        return option.name === value;
-                      }
-                      if (typeof value === 'object' && value !== null) {
-                        return option.name === value.name;
-                      }
-                      return false;
-                    }}
-                    value={referredByValue || null}
-                    onChange={(event, newValue) => {
-                      // Extract just the name if it's an object, otherwise use the string value
-                      let nameValue: string | null = null;
-                      if (typeof newValue === 'object' && newValue !== null) {
-                        nameValue = newValue.name;
-                      } else if (typeof newValue === 'string') {
-                        nameValue = newValue;
-                      }
-                      handleReferredByChange(nameValue);
-                      setAutocompleteOpen(false);
-                    }}
-                    onInputChange={(event, newInputValue, reason) => {
-                      // Track input value as user types
-                      referredByInputRef.current = newInputValue;
-                      if (reason === 'input') {
-                        setReferredByValue(newInputValue);
-                        // Open dropdown when user starts typing
-                        if (newInputValue.length > 0) {
-                          setAutocompleteOpen(true);
-                        } else {
-                          setAutocompleteOpen(false);
-                        }
-                      }
-                    }}
-                    filterOptions={(options, params) => {
-                      const searchTerm = params.inputValue.toLowerCase();
-                      if (!searchTerm) {
-                        return [];
-                      }
-                      const filtered = options.filter((option) => {
-                        const label = option.label.toLowerCase();
-                        const name = option.name.toLowerCase();
-                        return label.includes(searchTerm) || name.includes(searchTerm);
-                      });
-                      return filtered;
-                    }}
-                    renderOption={(props, option) => (
-                      <li {...props} key={option.name}>
-                        {option.label}
-                      </li>
-                    )}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        placeholder="Search and select a name"
-                        variant="outlined"
-                        size="small"
-                        onBlur={() => {
-                          // Save when user blurs the field after typing
-                          const currentValue = referredByInputRef.current || '';
-                          const normalizedCurrent = currentValue.trim();
-                          const normalizedStored = (profileData?.referred_by || '').trim();
-                          if (normalizedCurrent !== normalizedStored) {
-                            handleReferredByChange(normalizedCurrent || null);
-                          }
-                          setAutocompleteOpen(false);
-                        }}
-                        onFocus={() => {
-                          // Don't open on focus, only when typing
-                          setAutocompleteOpen(false);
-                        }}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            fontSize: '0.875rem',
-                            '& fieldset': {
-                              borderColor: '#e0e0e0',
-                            },
-                            '&:hover fieldset': {
-                              borderColor: '#1877F2',
-                            },
-                            '&.Mui-focused fieldset': {
-                              borderColor: '#1877F2',
-                            },
-                          },
-                        }}
-                      />
-                    )}
-                    loading={loading}
-                    disabled={savingReferredBy}
-                    sx={{
-                      '& .MuiAutocomplete-inputRoot': {
-                        padding: '4px 9px !important',
-                      },
-                    }}
-                  />
-                  {savingReferredBy && (
-                    <Typography variant="caption" sx={{ color: '#1877F2', fontSize: '0.7rem', mt: 0.5, display: 'block' }}>
-                      Saving...
-                    </Typography>
-                  )}
-                </Box>
-              </Box>
+              <DetailItem
+                icon={<PersonAddIcon />}
+                label="Referred By"
+                value={referredByValue || 'Not provided'}
+              />
             </Grid>
 
             {/* Complete Address */}
@@ -837,7 +771,51 @@ const UserProfile: React.FC = () => {
                       {/* Coach */}
                       <Grid item xs={12} sm={6}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <SportsIcon sx={{ fontSize: '1.2rem', color: '#1877F2' }} />
+                          {entry.coach ? (
+                            entry.coach_profile_url ? (
+                              <a
+                                href={entry.coach_profile_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ textDecoration: 'none' }}
+                              >
+                                <Avatar
+                                  src={entry.coach_picture || undefined}
+                                  sx={{
+                                    width: 84,
+                                    height: 84,
+                                    fontSize: '1.5rem',
+                                    fontWeight: 600,
+                                    bgcolor: entry.coach_picture ? 'transparent' : '#1877F2',
+                                    color: 'white',
+                                    cursor: 'pointer',
+                                    '&:hover': {
+                                      opacity: 0.8,
+                                      boxShadow: '0 2px 8px rgba(24, 119, 242, 0.4)'
+                                    }
+                                  }}
+                                >
+                                  {!entry.coach_picture && getInitials(entry.coach)}
+                                </Avatar>
+                              </a>
+                            ) : (
+                              <Avatar
+                                src={entry.coach_picture || undefined}
+                                sx={{
+                                  width: 84,
+                                  height: 84,
+                                  fontSize: '1.5rem',
+                                  fontWeight: 600,
+                                  bgcolor: entry.coach_picture ? 'transparent' : '#1877F2',
+                                  color: 'white'
+                                }}
+                              >
+                                {!entry.coach_picture && getInitials(entry.coach)}
+                              </Avatar>
+                            )
+                          ) : (
+                            <SportsIcon sx={{ fontSize: '1.2rem', color: '#1877F2' }} />
+                          )}
                           <Box>
                             <Typography variant="caption" sx={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 600 }}>
                               Coach

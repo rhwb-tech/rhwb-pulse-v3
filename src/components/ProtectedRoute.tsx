@@ -10,7 +10,7 @@ import { getAppConfig } from '../config/appConfig';
 import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
 import { supabase } from './supabaseClient';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import GeminiChatBot from './GeminiChatBot';
 
 interface ProtectedRouteProps {
@@ -19,28 +19,91 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent, session } = useAuth();
-  const { selectedRunner, userRole, hybridToggle } = useApp();
+  const { selectedRunner, userRole, hybridToggle, setOverrideEmail, setAuthenticatedEmail, overrideEmail, isOverrideActive } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = React.useState('');
   const [loginError, setLoginError] = React.useState('');
   // Remove authMethod state since we only have OTP now
   const [showOTPVerification, setShowOTPVerification] = React.useState(false);
   const [loadingTimeout, setLoadingTimeout] = React.useState(false);
+  const [overrideError, setOverrideError] = React.useState<string | null>(null);
   const appConfig = getAppConfig();
+  
+  // Parse email_id from URL parameters
+  const urlParams = new URLSearchParams(location.search);
+  const emailIdFromUrl = urlParams.get('email_id');
+  
+  // Track if we've processed the current URL override
+  const processedOverrideRef = React.useRef<string | null>(null);
 
   // Detect timeout scenario: session exists but no user and not loading
   React.useEffect(() => {
     if (session && !user && !isLoading) {
       // This indicates a validation timeout scenario
+      // Use a longer timeout (8 seconds) to account for async state updates
+      // and give validation time to complete and set user state
+      // This is longer than the validation timeout (15s for session restore) to allow for retries
       const timer = setTimeout(() => {
-        setLoadingTimeout(true);
-      }, 1000); // Wait 1 second to confirm it's stuck
+        // Double-check that user is still null before showing timeout
+        // This prevents race conditions where user state is being set
+        if (session && !user && !isLoading) {
+          console.log('[PROTECTED ROUTE] Timeout detected - session exists but no user after 8 seconds');
+          setLoadingTimeout(true);
+        }
+      }, 8000); // Wait 8 seconds to confirm it's stuck (longer than validation timeout + retries)
 
       return () => clearTimeout(timer);
     } else {
       setLoadingTimeout(false);
     }
   }, [session, user, isLoading]);
+
+  // Handle email override from URL parameter
+  React.useEffect(() => {
+    // Only process when user is authenticated
+    if (!isAuthenticated || !user) {
+      return;
+    }
+
+    // Set the authenticated email in AppContext
+    setAuthenticatedEmail(user.email);
+
+    // Check if there's an email_id in the URL
+    if (emailIdFromUrl) {
+      const normalizedOverrideEmail = emailIdFromUrl.toLowerCase().trim();
+      
+      // Skip if we've already processed this override
+      if (processedOverrideRef.current === normalizedOverrideEmail) {
+        return;
+      }
+
+      console.log('[PROTECTED ROUTE] Email override requested:', normalizedOverrideEmail);
+      console.log('[PROTECTED ROUTE] Authenticated user role:', user.role);
+
+      // Check if user has admin role
+      if (user.role !== 'admin') {
+        console.log('[PROTECTED ROUTE] Override rejected - user is not admin');
+        setOverrideError('Email override is only allowed for admin users.');
+        setOverrideEmail(null);
+        processedOverrideRef.current = normalizedOverrideEmail;
+        return;
+      }
+
+      // Admin user - allow override
+      console.log('[PROTECTED ROUTE] Override approved for admin user');
+      setOverrideEmail(normalizedOverrideEmail);
+      setOverrideError(null);
+      processedOverrideRef.current = normalizedOverrideEmail;
+    } else {
+      // No override in URL - clear any existing override
+      if (overrideEmail) {
+        console.log('[PROTECTED ROUTE] Clearing email override');
+        setOverrideEmail(null);
+        processedOverrideRef.current = null;
+      }
+    }
+  }, [isAuthenticated, user, emailIdFromUrl, setAuthenticatedEmail, setOverrideEmail, overrideEmail]);
 
   // Hamburger menu state (moved to header)
   const [hamburgerMenuAnchor, setHamburgerMenuAnchor] = React.useState<null | HTMLElement>(null);
@@ -66,21 +129,21 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   };
   const handleSeason14Click = async () => {
     // Determine which email to use for certificate generation
-    // For hybrid users in 'myScore' mode, use their own email (like athletes)
-    // For hybrid users in 'myCohorts' mode, they need to select an athlete (like coaches)
-    const isNonAthleteRole = userRole === 'coach' || userRole === 'admin' || (userRole === 'hybrid' && hybridToggle === 'myCohorts');
-    
-    // For coach/admin/hybrid in cohorts mode, check if an athlete is selected
-    if (isNonAthleteRole && !selectedRunner) {
-      setSnackbarMessage('Please select an athlete from the dashboard before generating a certificate.');
+    // For hybrid users in 'myScore' mode, use their own email (like runners)
+    // For hybrid users in 'myCohorts' mode, they need to select a runner (like coaches)
+    const isNonRunnerRole = userRole === 'coach' || userRole === 'admin' || (userRole === 'hybrid' && hybridToggle === 'myCohorts');
+
+    // For coach/admin/hybrid in cohorts mode, check if a runner is selected
+    if (isNonRunnerRole && !selectedRunner) {
+      setSnackbarMessage('Please select a runner from the dashboard before generating a certificate.');
       setSnackbarOpen(true);
       setHamburgerMenuAnchor(null);
       return;
     }
-    
-    // Use selectedRunner email if available (for coach/admin/hybrid in cohorts mode), 
-    // otherwise use logged-in user's email (for athlete or hybrid in myScore mode)
-    const targetEmail = (isNonAthleteRole && selectedRunner) ? selectedRunner : (user?.email || '');
+
+    // Use selectedRunner email if available (for coach/admin/hybrid in cohorts mode),
+    // otherwise use logged-in user's email (for runner or hybrid in myScore mode)
+    const targetEmail = (isNonRunnerRole && selectedRunner) ? selectedRunner : (user?.email || '');
     
     if (!targetEmail) {
       console.error('No email available for certificate generation');
@@ -176,11 +239,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     setShowOTPVerification(false);
     clearEmailSent();
   };
-
-  // Check if we're in override mode
-  const urlParams = new URLSearchParams(window.location.search);
-  const overrideEmail = urlParams.get('email');
-  const isOverrideMode = !!overrideEmail;
 
   // Show loading spinner while checking authentication
   if (isLoading || loadingTimeout) {
@@ -496,9 +554,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Welcome, {user?.name || user?.email} ({user?.role})
-              {isOverrideMode && (
+              {isOverrideActive && (
                 <span style={{ color: '#f57c00', fontWeight: 'bold' }}>
-                  {' '}(Override Mode)
+                  {' '}(Viewing: {overrideEmail})
                 </span>
               )}
             </Typography>
@@ -545,6 +603,49 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </Box>
       </Box>
       
+      {/* Override Error Alert */}
+      {overrideError && (
+        <Alert 
+          severity="error" 
+          sx={{ mx: 2, mt: 2 }}
+          onClose={() => setOverrideError(null)}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Access Denied
+          </Typography>
+          <Typography variant="body2">
+            {overrideError}
+          </Typography>
+        </Alert>
+      )}
+
+      {/* Override Active Banner */}
+      {isOverrideActive && !overrideError && (
+        <Alert 
+          severity="info" 
+          sx={{ mx: 2, mt: 2 }}
+        >
+          <Typography variant="body2">
+            <strong>Override Mode Active:</strong> You are viewing data for <strong>{overrideEmail}</strong>. 
+            {' '}
+            <Button 
+              size="small" 
+              variant="text" 
+              onClick={() => {
+                // Remove email_id from URL and navigate
+                const params = new URLSearchParams(location.search);
+                params.delete('email_id');
+                const newSearch = params.toString();
+                navigate(location.pathname + (newSearch ? `?${newSearch}` : ''), { replace: true });
+              }}
+              sx={{ ml: 1, textTransform: 'none' }}
+            >
+              Exit Override Mode
+            </Button>
+          </Typography>
+        </Alert>
+      )}
+
       {/* Main content */}
       <Box sx={{ p: 2 }}>
         {children}
@@ -593,8 +694,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </Alert>
       </Snackbar>
 
-      {/* Gemini AI Chatbot */}
-      <GeminiChatBot />
+      {/* Gemini AI Chatbot - Admin only */}
+      {user?.role === 'admin' && <GeminiChatBot />}
     </Box>
   );
 };

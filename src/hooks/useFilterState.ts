@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
+import { supabaseValidation } from '../components/supabaseClient';
 import type { UserRole } from '../types/user';
 
 interface Option {
@@ -53,14 +54,48 @@ export interface FilterState {
   hybridToggleMenuOpen: boolean;
 }
 
-export const useFilterState = (userRole: UserRole, selectedRunnerFromProps?: string): FilterState => {
+// Helper to get cached coach list from sessionStorage
+const getCachedCoachList = (): Option[] => {
+  try {
+    const cached = sessionStorage.getItem('rhwb-pulse-coach-list');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      console.log('[FILTER STATE] Loaded coach list from cache:', parsed.length, 'coaches');
+      return parsed;
+    }
+  } catch (err) {
+    console.error('[FILTER STATE] Error loading coach list from cache:', err);
+  }
+  return [];
+};
+
+// Helper to save coach list to sessionStorage
+const saveCachedCoachList = (list: Option[]): void => {
+  try {
+    sessionStorage.setItem('rhwb-pulse-coach-list', JSON.stringify(list));
+    console.log('[FILTER STATE] Saved coach list to cache:', list.length, 'coaches');
+  } catch (err) {
+    console.error('[FILTER STATE] Error saving coach list to cache:', err);
+  }
+};
+
+export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFromProps?: string): FilterState => {
   const { setSelectedRunner: setContextSelectedRunner, setUserRole: setContextUserRole, setHybridToggle: setContextHybridToggle } = useApp();
 
-  // Filter state
-  const [season, setSeason] = useState('14'); // Default to Season 14
-  const [coachList, setCoachList] = useState<Option[]>([]);
+  // Filter state - initialize coachList from sessionStorage cache
+  const [season, setSeason] = useState(''); // Will be set to most recent season after fetch
+  const [coachList, setCoachListInternal] = useState<Option[]>(getCachedCoachList);
+  const seasonFetchedRef = useRef(false); // Track if seasons have been fetched
   const [runnerList, setRunnerList] = useState<Option[]>([]);
   const [selectedCoach, setSelectedCoach] = useState('');
+  
+  // Wrapper for setCoachList that also saves to cache
+  const setCoachList = (list: Option[]) => {
+    setCoachListInternal(list);
+    if (list.length > 0) {
+      saveCachedCoachList(list);
+    }
+  };
   const [selectedRunner, setSelectedRunner] = useState('');
   const [hybridToggle, setHybridToggle] = useState<'myScore' | 'myCohorts'>('myCohorts');
   const [coachName, setCoachName] = useState('');
@@ -84,13 +119,86 @@ export const useFilterState = (userRole: UserRole, selectedRunnerFromProps?: str
   const [hybridToggleMenuAnchor, setHybridToggleMenuAnchor] = useState<null | HTMLElement>(null);
   const hybridToggleMenuOpen = Boolean(hybridToggleMenuAnchor);
 
-  // Set hardcoded season options
+  // Fetch season options from database
   useEffect(() => {
-    const hardcodedSeasons = [
-      { value: '14', label: 'Season 14' },
-      { value: '13', label: 'Season 13' }
-    ];
-    setSeasonOptions(hardcodedSeasons);
+    if (seasonFetchedRef.current) {
+      return;
+    }
+
+    const fetchSeasons = async () => {
+      try {
+        console.log('[FILTER STATE] Fetching seasons from database...');
+
+        // Query distinct seasons from rhwb_meso_scores table
+        // Use supabaseValidation to avoid hanging (no session persistence)
+        const { data, error } = await supabaseValidation
+          .from('rhwb_meso_scores')
+          .select('season')
+          .order('season', { ascending: false });
+
+        if (error) {
+          console.error('[FILTER STATE] Error fetching seasons:', error);
+          // Fallback to hardcoded seasons if fetch fails
+          const fallbackSeasons = [
+            { value: '14', label: 'Season 14' },
+            { value: '13', label: 'Season 13' }
+          ];
+          setSeasonOptions(fallbackSeasons);
+          setSeason('14');
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          console.warn('[FILTER STATE] No seasons found in database');
+          const fallbackSeasons = [
+            { value: '14', label: 'Season 14' },
+            { value: '13', label: 'Season 13' }
+          ];
+          setSeasonOptions(fallbackSeasons);
+          setSeason('14');
+          return;
+        }
+
+        // Get unique seasons and extract the season number
+        const uniqueSeasons = Array.from(new Set(data.map(row => row.season)))
+          .filter(Boolean)
+          .map(seasonStr => {
+            // Extract season number from "Season X" format
+            const match = seasonStr.match(/Season\s+(\d+)/i);
+            const seasonNum = match ? match[1] : seasonStr;
+            return {
+              value: seasonNum,
+              label: seasonStr,
+              numericValue: parseInt(seasonNum, 10) || 0
+            };
+          })
+          .sort((a, b) => b.numericValue - a.numericValue); // Sort descending (most recent first)
+
+        const seasonOpts = uniqueSeasons.map(s => ({ value: s.value, label: s.label }));
+        console.log('[FILTER STATE] Loaded seasons:', seasonOpts);
+
+        setSeasonOptions(seasonOpts);
+
+        // Set default to most recent season (first in the sorted list)
+        if (seasonOpts.length > 0) {
+          console.log('[FILTER STATE] Setting default season to:', seasonOpts[0].value);
+          setSeason(seasonOpts[0].value);
+        }
+
+        seasonFetchedRef.current = true;
+      } catch (err) {
+        console.error('[FILTER STATE] Exception fetching seasons:', err);
+        // Fallback to hardcoded seasons
+        const fallbackSeasons = [
+          { value: '14', label: 'Season 14' },
+          { value: '13', label: 'Season 13' }
+        ];
+        setSeasonOptions(fallbackSeasons);
+        setSeason('14');
+      }
+    };
+
+    fetchSeasons();
   }, []);
 
   // Auto-select first runner when admin selects a coach
@@ -120,7 +228,10 @@ export const useFilterState = (userRole: UserRole, selectedRunnerFromProps?: str
   }, [selectedRunner, setContextSelectedRunner]);
 
   useEffect(() => {
-    setContextUserRole(userRole);
+    // Only update context when userRole is defined (not during loading)
+    if (userRole) {
+      setContextUserRole(userRole);
+    }
   }, [userRole, setContextUserRole]);
 
   useEffect(() => {
