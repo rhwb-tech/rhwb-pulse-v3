@@ -9,7 +9,11 @@ import {
   Card,
   IconButton,
   Container,
-  Alert
+  Alert,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import MaleIcon from '@mui/icons-material/Male';
@@ -20,6 +24,7 @@ import CakeIcon from '@mui/icons-material/Cake';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import PhotoLibraryIcon from '@mui/icons-material/PhotoLibrary';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import SportsIcon from '@mui/icons-material/Sports';
@@ -27,6 +32,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { supabase, supabaseValidation } from './supabaseClient';
 import { useNavigate } from 'react-router-dom';
+import ImageCropModal from './ImageCropModal';
+import CameraCaptureModal from './CameraCaptureModal';
 
 interface RunnerProfile {
   email_id: string;
@@ -72,13 +79,41 @@ const UserProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [referredByValue, setReferredByValue] = useState<string | null>(null);
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [selectedImageSrc, setSelectedImageSrc] = useState<string>('');
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle avatar click to trigger file input
-  const handleAvatarClick = () => {
+  // Handle avatar click to show photo source menu
+  const handleAvatarClick = (event: React.MouseEvent<HTMLElement>) => {
     if (!isOverrideActive && !uploading) {
-      fileInputRef.current?.click();
+      setMenuAnchorEl(event.currentTarget);
     }
+  };
+
+  // Close the photo source menu
+  const handleMenuClose = () => {
+    setMenuAnchorEl(null);
+  };
+
+  // Handle selecting "Upload Photo" from menu
+  const handleUploadOption = () => {
+    handleMenuClose();
+    fileInputRef.current?.click();
+  };
+
+  // Handle selecting "Take Photo" from menu
+  const handleCameraOption = () => {
+    handleMenuClose();
+    setShowCameraModal(true);
+  };
+
+  // Handle camera capture - opens crop modal with captured image
+  const handleCameraCapture = (imageSrc: string) => {
+    setShowCameraModal(false);
+    setSelectedImageSrc(imageSrc);
+    setShowCropModal(true);
   };
 
   // Use effectiveEmail (which respects override) for profile data
@@ -306,9 +341,13 @@ const UserProfile: React.FC = () => {
     loadReferredByData();
   }, [profileData?.referred_by_email_id, profileData?.referred_by]);
 
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file selection - validates and opens crop modal
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user?.email) return;
+
+    // Reset file input so the same file can be selected again
+    event.target.value = '';
 
     // Block avatar upload in override mode (admin viewing another user's profile)
     if (isOverrideActive) {
@@ -328,19 +367,33 @@ const UserProfile: React.FC = () => {
       return;
     }
 
+    // Read file as data URL and open crop modal
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImageSrc(reader.result as string);
+      setShowCropModal(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle crop complete - uploads cropped image to Supabase
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    if (!user?.email) return;
+
     try {
       setUploading(true);
+      setShowCropModal(false);
 
-      // Generate unique filename with email and timestamp
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.email.toLowerCase()}/avatar-${Date.now()}.${fileExt}`;
+      // Generate unique filename with email and timestamp (always .jpg for cropped images)
+      const fileName = `${user.email.toLowerCase()}/avatar-${Date.now()}.jpg`;
 
       // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('profile_pictures')
-        .upload(fileName, file, {
+        .upload(fileName, croppedBlob, {
           cacheControl: '3600',
-          upsert: true
+          upsert: true,
+          contentType: 'image/jpeg'
         });
 
       if (uploadError) {
@@ -393,6 +446,7 @@ const UserProfile: React.FC = () => {
       alert('An unexpected error occurred. Please try again.');
     } finally {
       setUploading(false);
+      setSelectedImageSrc('');
     }
   };
 
@@ -515,7 +569,7 @@ const UserProfile: React.FC = () => {
               style={{ display: 'none' }}
               ref={fileInputRef}
               type="file"
-              onChange={handleAvatarUpload}
+              onChange={handleFileSelect}
               disabled={uploading}
             />
             <Avatar
@@ -864,6 +918,60 @@ const UserProfile: React.FC = () => {
           </Button>
         </Box>
       </Container>
+
+      {/* Photo Source Menu */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={handleMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'center',
+        }}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            mt: 1,
+            minWidth: 180,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'
+          }
+        }}
+      >
+        <MenuItem onClick={handleCameraOption} sx={{ py: 1.5 }}>
+          <ListItemIcon>
+            <CameraAltIcon sx={{ color: '#1877F2' }} />
+          </ListItemIcon>
+          <ListItemText primary="Take Photo" />
+        </MenuItem>
+        <MenuItem onClick={handleUploadOption} sx={{ py: 1.5 }}>
+          <ListItemIcon>
+            <PhotoLibraryIcon sx={{ color: '#1877F2' }} />
+          </ListItemIcon>
+          <ListItemText primary="Upload Photo" />
+        </MenuItem>
+      </Menu>
+
+      {/* Camera Capture Modal */}
+      <CameraCaptureModal
+        open={showCameraModal}
+        onClose={() => setShowCameraModal(false)}
+        onCapture={handleCameraCapture}
+      />
+
+      {/* Image Crop Modal */}
+      <ImageCropModal
+        open={showCropModal}
+        imageSrc={selectedImageSrc}
+        onClose={() => {
+          setShowCropModal(false);
+          setSelectedImageSrc('');
+        }}
+        onCropComplete={handleCropComplete}
+      />
     </Box>
   );
 };
