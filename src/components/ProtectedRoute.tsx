@@ -11,7 +11,7 @@ import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
 import { supabase } from './supabaseClient';
 import { useNavigate, useLocation } from 'react-router-dom';
-import GeminiChatBot from './GeminiChatBot';
+// import GeminiChatBot from './GeminiChatBot';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -694,8 +694,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </Alert>
       </Snackbar>
 
-      {/* Gemini AI Chatbot - Admin only */}
-      {user?.role === 'admin' && <GeminiChatBot />}
+      {/* Gemini AI Chatbot - Disabled for now */}
+      {/* <GeminiChatBot /> */}
     </Box>
   );
 };

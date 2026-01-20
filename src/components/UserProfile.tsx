@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Button,
   Box,
@@ -72,6 +72,14 @@ const UserProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [referredByValue, setReferredByValue] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle avatar click to trigger file input
+  const handleAvatarClick = () => {
+    if (!isOverrideActive && !uploading) {
+      fileInputRef.current?.click();
+    }
+  };
 
   // Use effectiveEmail (which respects override) for profile data
   const targetEmail = effectiveEmail || user?.email || '';
@@ -505,36 +513,34 @@ const UserProfile: React.FC = () => {
             <input
               accept="image/*"
               style={{ display: 'none' }}
-              id="avatar-upload"
+              ref={fileInputRef}
               type="file"
               onChange={handleAvatarUpload}
               disabled={uploading}
             />
-            <label htmlFor="avatar-upload">
-              <Avatar
-                src={profileData?.profile_picture || undefined}
-                sx={{
-                  width: 90,
-                  height: 90,
-                  bgcolor: 'white',
-                  color: '#1877F2',
-                  border: '3px solid white',
-                  boxShadow: '0 6px 20px rgba(0, 0, 0, 0.2)',
-                  cursor: 'pointer',
-                  '&:hover': {
-                    opacity: 0.8
-                  }
-                }}
-              >
-                {!profileData?.profile_picture && <DirectionsRunIcon sx={{ fontSize: '3rem' }} />}
-              </Avatar>
-            </label>
+            <Avatar
+              src={profileData?.profile_picture || undefined}
+              onClick={handleAvatarClick}
+              sx={{
+                width: 90,
+                height: 90,
+                bgcolor: 'white',
+                color: '#1877F2',
+                border: '3px solid white',
+                boxShadow: '0 6px 20px rgba(0, 0, 0, 0.2)',
+                cursor: isOverrideActive ? 'default' : 'pointer',
+                '&:hover': {
+                  opacity: isOverrideActive ? 1 : 0.8
+                }
+              }}
+            >
+              {!profileData?.profile_picture && <DirectionsRunIcon sx={{ fontSize: '3rem' }} />}
+            </Avatar>
 
             {/* Camera Icon Overlay */}
-            <label htmlFor="avatar-upload">
-              <IconButton
-                component="span"
-                disabled={uploading}
+            <IconButton
+              onClick={handleAvatarClick}
+              disabled={uploading || isOverrideActive}
                 sx={{
                   position: 'absolute',
                   bottom: -5,
@@ -555,7 +561,6 @@ const UserProfile: React.FC = () => {
                   <CameraAltIcon sx={{ fontSize: '1rem' }} />
                 )}
               </IconButton>
-            </label>
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
