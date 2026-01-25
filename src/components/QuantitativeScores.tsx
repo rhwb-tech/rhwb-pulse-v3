@@ -190,6 +190,12 @@ const QuantitativeScores: React.FC<QuantitativeScoresProps> = ({ data }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+  // Calculate dynamic height based on number of meso cycles
+  // Each meso needs ~80px on mobile (3 bars + gaps), ~100px on desktop
+  const minHeight = isMobile ? 280 : 320;
+  const heightPerMeso = isMobile ? 80 : 100;
+  const calculatedHeight = Math.max(minHeight, data.length * heightPerMeso);
+
   return (
     <Box
       sx={{
@@ -233,7 +239,7 @@ const QuantitativeScores: React.FC<QuantitativeScoresProps> = ({ data }) => {
       </Box>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={isMobile ? 320 : 380}>
+      <ResponsiveContainer width="100%" height={calculatedHeight}>
         <BarChart
           data={data}
           margin={{

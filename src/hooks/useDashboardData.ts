@@ -28,6 +28,9 @@ interface DashboardDataState {
   // Training feedback
   trainingFeedback: Array<{ meso: string; qual: string }>;
 
+  // Last data refresh date
+  lastDataRefresh: string | null;
+
   // Data fetching functions
   fetchWidgetData: () => Promise<void>;
   fetchCumulativeScore: () => Promise<void>;
@@ -73,6 +76,33 @@ export const useDashboardData = (
     strength: { percent: null, planned: null, completed: null }
   });
   const [trainingFeedback, setTrainingFeedback] = useState<Array<{ meso: string; qual: string }>>([]);
+  const [lastDataRefresh, setLastDataRefresh] = useState<string | null>(null);
+
+  // Fetch last data refresh date from rhwb_dashboard_status
+  useEffect(() => {
+    const fetchLastDataRefresh = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('rhwb_dashboard_status')
+          .select('last_activity_date, updated_at')
+          .eq('id', 1)
+          .single();
+
+        if (error) {
+          console.error('[DASHBOARD DATA] Error fetching last data refresh:', error);
+          return;
+        }
+
+        if (data?.last_activity_date) {
+          setLastDataRefresh(data.last_activity_date);
+        }
+      } catch (err) {
+        console.error('[DASHBOARD DATA] Unexpected error fetching last data refresh:', err);
+      }
+    };
+
+    fetchLastDataRefresh();
+  }, []);
 
   // Add a timeout to prevent infinite loading
   useEffect(() => {
@@ -540,6 +570,7 @@ export const useDashboardData = (
     cumulativeScore,
     activitySummary,
     trainingFeedback,
+    lastDataRefresh,
     fetchWidgetData,
     fetchCumulativeScore,
     fetchActivitySummary,

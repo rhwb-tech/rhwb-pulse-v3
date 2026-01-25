@@ -771,121 +771,123 @@ const UserProfile: React.FC = () => {
               </Typography>
             </Box>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {timelineData.map((entry, index) => (
                 <Box
                   key={index}
                   sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    p: 2,
+                    p: { xs: 1.5, sm: 2 },
                     borderRadius: 2,
                     bgcolor: '#f8f9fa',
                     border: '1px solid #e9ecef',
                     transition: 'all 0.2s',
                     '&:hover': {
                       bgcolor: '#f0f2f5',
-                      borderColor: '#1877F2',
-                      transform: 'translateX(4px)'
+                      borderColor: '#1877F2'
                     }
                   }}
                 >
-                  {/* Season Badge */}
+                  {/* Season Header Row */}
                   <Box sx={{
-                    minWidth: 100,
-                    height: 50,
-                    borderRadius: 2,
-                    background: 'linear-gradient(135deg, #1877F2 0%, #0E5FD3 100%)',
-                    color: 'white',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 700,
-                    fontSize: '0.95rem',
-                    boxShadow: '0 2px 8px rgba(24, 119, 242, 0.3)',
-                    mr: 2,
-                    flexShrink: 0
+                    justifyContent: 'space-between',
+                    mb: 1.5,
+                    pb: 1,
+                    borderBottom: '1px solid #e9ecef'
                   }}>
-                    {entry.season}
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        color: '#1877F2'
+                      }}
+                    >
+                      {entry.season}
+                    </Typography>
+                    {entry.race_distance && (
+                      <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.5,
+                        bgcolor: 'rgba(24, 119, 242, 0.1)',
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: 999
+                      }}>
+                        <EmojiEventsIcon sx={{ fontSize: '0.9rem', color: '#1877F2' }} />
+                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#1877F2' }}>
+                          {entry.race_distance}
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
 
-                  {/* Timeline Details */}
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Grid container spacing={2}>
-                      {/* Race Distance */}
-                      <Grid item xs={12} sm={6}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <EmojiEventsIcon sx={{ fontSize: '1.2rem', color: '#1877F2' }} />
-                          <Box>
-                            <Typography variant="caption" sx={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 600 }}>
-                              Race Distance
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 500, color: '#333', fontSize: '0.875rem' }}>
-                              {entry.race_distance || 'Not specified'}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Grid>
-
-                      {/* Coach */}
-                      <Grid item xs={12} sm={6}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {entry.coach ? (
-                            entry.coach_profile_url ? (
-                              <a
-                                href={entry.coach_profile_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ textDecoration: 'none' }}
-                              >
-                                <Avatar
-                                  src={entry.coach_picture || undefined}
-                                  sx={{
-                                    width: 84,
-                                    height: 84,
-                                    fontSize: '1.5rem',
-                                    fontWeight: 600,
-                                    bgcolor: entry.coach_picture ? 'transparent' : '#1877F2',
-                                    color: 'white',
-                                    cursor: 'pointer',
-                                    '&:hover': {
-                                      opacity: 0.8,
-                                      boxShadow: '0 2px 8px rgba(24, 119, 242, 0.4)'
-                                    }
-                                  }}
-                                >
-                                  {!entry.coach_picture && getInitials(entry.coach)}
-                                </Avatar>
-                              </a>
-                            ) : (
-                              <Avatar
-                                src={entry.coach_picture || undefined}
-                                sx={{
-                                  width: 84,
-                                  height: 84,
-                                  fontSize: '1.5rem',
-                                  fontWeight: 600,
-                                  bgcolor: entry.coach_picture ? 'transparent' : '#1877F2',
-                                  color: 'white'
-                                }}
-                              >
-                                {!entry.coach_picture && getInitials(entry.coach)}
-                              </Avatar>
-                            )
-                          ) : (
-                            <SportsIcon sx={{ fontSize: '1.2rem', color: '#1877F2' }} />
-                          )}
-                          <Box>
-                            <Typography variant="caption" sx={{ color: '#666', fontSize: '0.7rem', textTransform: 'uppercase', fontWeight: 600 }}>
-                              Coach
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 500, color: '#333', fontSize: '0.875rem' }}>
-                              {entry.coach || 'Not assigned'}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Grid>
-                    </Grid>
+                  {/* Coach Info */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    {entry.coach ? (
+                      entry.coach_profile_url ? (
+                        <a
+                          href={entry.coach_profile_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ textDecoration: 'none' }}
+                        >
+                          <Avatar
+                            src={entry.coach_picture || undefined}
+                            sx={{
+                              width: { xs: 40, sm: 48 },
+                              height: { xs: 40, sm: 48 },
+                              fontSize: '1rem',
+                              fontWeight: 600,
+                              bgcolor: entry.coach_picture ? 'transparent' : '#1877F2',
+                              color: 'white',
+                              cursor: 'pointer',
+                              '&:hover': {
+                                opacity: 0.8,
+                                boxShadow: '0 2px 8px rgba(24, 119, 242, 0.4)'
+                              }
+                            }}
+                          >
+                            {!entry.coach_picture && getInitials(entry.coach)}
+                          </Avatar>
+                        </a>
+                      ) : (
+                        <Avatar
+                          src={entry.coach_picture || undefined}
+                          sx={{
+                            width: { xs: 40, sm: 48 },
+                            height: { xs: 40, sm: 48 },
+                            fontSize: '1rem',
+                            fontWeight: 600,
+                            bgcolor: entry.coach_picture ? 'transparent' : '#1877F2',
+                            color: 'white'
+                          }}
+                        >
+                          {!entry.coach_picture && getInitials(entry.coach)}
+                        </Avatar>
+                      )
+                    ) : (
+                      <Box sx={{
+                        width: { xs: 40, sm: 48 },
+                        height: { xs: 40, sm: 48 },
+                        borderRadius: '50%',
+                        bgcolor: 'rgba(24, 119, 242, 0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <SportsIcon sx={{ fontSize: '1.2rem', color: '#1877F2' }} />
+                      </Box>
+                    )}
+                    <Box>
+                      <Typography variant="caption" sx={{ color: '#666', fontSize: '0.65rem', textTransform: 'uppercase', fontWeight: 600, letterSpacing: '0.3px' }}>
+                        Coach
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 500, color: '#333', fontSize: '0.85rem' }}>
+                        {entry.coach || 'Not assigned'}
+                      </Typography>
+                    </Box>
                   </Box>
                 </Box>
               ))}

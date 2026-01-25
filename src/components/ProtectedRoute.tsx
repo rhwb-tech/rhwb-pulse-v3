@@ -17,6 +17,16 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
+// Helper function to get initials from a name
+const getInitials = (name: string | null | undefined): string => {
+  if (!name) return '?';
+  const words = name.trim().split(/\s+/);
+  if (words.length === 1) {
+    return words[0].charAt(0).toUpperCase();
+  }
+  return (words[0].charAt(0) + words[words.length - 1].charAt(0)).toUpperCase();
+};
+
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, user, logout, login, isEmailSent, clearEmailSent, session } = useAuth();
   const { selectedRunner, userRole, hybridToggle, setOverrideEmail, setAuthenticatedEmail, overrideEmail, isOverrideActive } = useApp();
@@ -28,6 +38,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const [showOTPVerification, setShowOTPVerification] = React.useState(false);
   const [loadingTimeout, setLoadingTimeout] = React.useState(false);
   const [overrideError, setOverrideError] = React.useState<string | null>(null);
+  const [profilePicture, setProfilePicture] = React.useState<string | null>(null);
   const appConfig = getAppConfig();
   
   // Parse email_id from URL parameters
@@ -105,6 +116,56 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     }
   }, [isAuthenticated, user, emailIdFromUrl, setAuthenticatedEmail, setOverrideEmail, overrideEmail]);
 
+  // Fetch user's profile picture
+  React.useEffect(() => {
+    const fetchProfilePicture = async () => {
+      if (!isAuthenticated || !user?.email) {
+        setProfilePicture(null);
+        return;
+      }
+
+      try {
+        const userEmail = user.email.toLowerCase();
+        const role = user.role;
+
+        // Determine which table to query based on role
+        let tableName = 'runners_profile';
+        if (role === 'admin') {
+          tableName = 'rhwb_admin';
+        } else if (role === 'coach' || role === 'hybrid') {
+          tableName = 'rhwb_coaches';
+        }
+
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('profile_picture')
+          .eq('email_id', userEmail)
+          .single();
+
+        if (!error && data?.profile_picture) {
+          setProfilePicture(data.profile_picture);
+        } else {
+          // Fallback to runners_profile if role-specific table has no picture
+          if (tableName !== 'runners_profile') {
+            const { data: runnerData } = await supabase
+              .from('runners_profile')
+              .select('profile_picture')
+              .eq('email_id', userEmail)
+              .single();
+
+            if (runnerData?.profile_picture) {
+              setProfilePicture(runnerData.profile_picture);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[PROTECTED ROUTE] Error fetching profile picture:', err);
+      }
+    };
+
+    fetchProfilePicture();
+  }, [isAuthenticated, user?.email, user?.role]);
+
   // Hamburger menu state (moved to header)
   const [hamburgerMenuAnchor, setHamburgerMenuAnchor] = React.useState<null | HTMLElement>(null);
   const hamburgerMenuOpen = Boolean(hamburgerMenuAnchor);
@@ -113,6 +174,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   };
   const handleHamburgerMenuClose = () => {
     setHamburgerMenuAnchor(null);
+  };
+
+  // Profile menu state
+  const [profileMenuAnchor, setProfileMenuAnchor] = React.useState<null | HTMLElement>(null);
+  const profileMenuOpen = Boolean(profileMenuAnchor);
+  const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setProfileMenuAnchor(event.currentTarget);
+  };
+  const handleProfileMenuClose = () => {
+    setProfileMenuAnchor(null);
   };
   
   // Certificate dialog state
@@ -222,10 +293,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
-  };
-
-  const handleProfileClick = () => {
-    navigate('/profile');
   };
 
   // OTP handler functions
@@ -500,20 +567,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             }}
           >
             <MenuItem
-              onClick={() => {
-                navigate('/profile');
-                handleHamburgerMenuClose();
-              }}
-              sx={{
-                minHeight: 40,
-                '&:hover': {
-                  bgcolor: '#f5f5f5',
-                },
-              }}
-            >
-              <ListItemText primary="Profile" />
-            </MenuItem>
-            <MenuItem
               onClick={handleCertificatesClick}
               sx={{
                 minHeight: 40,
@@ -552,7 +605,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             <Typography variant="h5" component="h1" sx={{ fontWeight: 600 }}>
               {appConfig.appName}
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ display: { xs: 'none', sm: 'block' } }}
+            >
               Welcome, {user?.name || user?.email} ({user?.role})
               {isOverrideActive && (
                 <span style={{ color: '#f57c00', fontWeight: 'bold' }}>
@@ -564,9 +621,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {/* Profile Avatar */}
+          {/* Profile Avatar with Menu */}
           <IconButton
-            onClick={handleProfileClick}
+            onClick={handleProfileMenuOpen}
             sx={{
               p: 0,
               '&:hover': {
@@ -574,32 +631,80 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
                 transition: 'transform 0.2s'
               }
             }}
+            aria-label="Profile menu"
           >
             <Avatar
+              src={profilePicture || undefined}
               sx={{
                 width: 40,
                 height: 40,
-                bgcolor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                bgcolor: profilePicture ? 'transparent' : undefined,
+                background: profilePicture ? 'transparent' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 cursor: 'pointer',
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                fontWeight: 600,
+                fontSize: '1rem',
                 '&:hover': {
                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)'
                 }
               }}
             >
-              <PersonIcon />
+              {!profilePicture && getInitials(user?.name || user?.email)}
             </Avatar>
           </IconButton>
 
-          {/* Sign Out Button */}
-          <Button
-            variant="outlined"
-            onClick={logout}
-            size="small"
+          {/* Profile Menu */}
+          <Menu
+            anchorEl={profileMenuAnchor}
+            open={profileMenuOpen}
+            onClose={handleProfileMenuClose}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'right',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'right',
+            }}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                minWidth: 150,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                borderRadius: 2,
+                border: '1px solid #e0e0e0',
+              }
+            }}
           >
-            Sign Out
-          </Button>
+            <MenuItem
+              onClick={() => {
+                navigate('/profile');
+                handleProfileMenuClose();
+              }}
+              sx={{
+                minHeight: 40,
+                '&:hover': {
+                  bgcolor: '#f5f5f5',
+                },
+              }}
+            >
+              <ListItemText primary="Profile" />
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                handleProfileMenuClose();
+                logout();
+              }}
+              sx={{
+                minHeight: 40,
+                '&:hover': {
+                  bgcolor: '#f5f5f5',
+                },
+              }}
+            >
+              <ListItemText primary="Sign Out" />
+            </MenuItem>
+          </Menu>
         </Box>
       </Box>
       

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, Fab, Drawer, Typography, IconButton } from '@mui/material';
+import { Box, Fab, Drawer, Typography, IconButton, Chip } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
+import UpdateIcon from '@mui/icons-material/Update';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { useFilterState } from '../hooks/useFilterState';
@@ -109,9 +110,136 @@ const DashboardContainer: React.FC = () => {
     prevRunnerRef.current = currentRunner;
   }, [filterState.selectedRunner, filterDrawerOpen]);
 
+  // Format the last data refresh date
+  const formatRefreshDate = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    try {
+      // Parse date parts directly to avoid timezone issues
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const date = new Date(year, month - 1, day); // month is 0-indexed
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Get the selected runner's name from the runner list
+  const getRunnerName = () => {
+    if (!filterState.selectedRunner) return null;
+    const runner = filterState.runnerList.find(r => r.value === filterState.selectedRunner);
+    return runner?.label || filterState.selectedRunner;
+  };
+
+  // Get the selected coach's name
+  const getCoachName = () => {
+    if (userRole === 'admin' && filterState.selectedCoach) {
+      return filterState.selectedCoach;
+    }
+    if ((userRole === 'coach' || userRole === 'hybrid') && filterState.coachName) {
+      return filterState.coachName;
+    }
+    return null;
+  };
+
   return (
     <>
       <Box sx={{ px: { xs: 1, sm: 2, md: 3 }, py: 1 }}>
+        {/* Info Bar - Current Selections & Data Refresh */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+            mb: 2,
+            p: 1.5,
+            bgcolor: 'rgba(24, 119, 242, 0.04)',
+            borderRadius: 2,
+            border: '1px solid rgba(24, 119, 242, 0.1)',
+          }}
+        >
+          {/* Current Selections */}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
+            <Chip
+              label={`Season ${filterState.season}`}
+              size="small"
+              sx={{
+                bgcolor: 'primary.main',
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '0.75rem',
+              }}
+            />
+
+            {/* Show coach for admin/coach/hybrid roles */}
+            {getCoachName() && (
+              <Chip
+                label={`Coach: ${getCoachName()}`}
+                size="small"
+                variant="outlined"
+                sx={{
+                  borderColor: 'primary.main',
+                  color: 'primary.main',
+                  fontWeight: 500,
+                  fontSize: '0.75rem',
+                }}
+              />
+            )}
+
+            {/* Show hybrid toggle state */}
+            {userRole === 'hybrid' && (
+              <Chip
+                label={filterState.hybridToggle === 'myScore' ? 'My Score' : 'My Cohorts'}
+                size="small"
+                variant="outlined"
+                sx={{
+                  borderColor: '#9c27b0',
+                  color: '#9c27b0',
+                  fontWeight: 500,
+                  fontSize: '0.75rem',
+                }}
+              />
+            )}
+
+            {/* Show selected runner */}
+            {getRunnerName() && (
+              <Chip
+                label={getRunnerName()}
+                size="small"
+                sx={{
+                  bgcolor: '#e3f2fd',
+                  color: '#1565c0',
+                  fontWeight: 500,
+                  fontSize: '0.75rem',
+                }}
+              />
+            )}
+          </Box>
+
+          {/* Data Refresh Date */}
+          {dashboardData.lastDataRefresh && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                color: 'text.secondary',
+                fontSize: '0.75rem',
+              }}
+            >
+              <UpdateIcon sx={{ fontSize: 16 }} />
+              <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                Data as of {formatRefreshDate(dashboardData.lastDataRefresh)}
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
         {/* Dashboard Widgets */}
         <DashboardWidgets
           loading={dashboardData.loading}
