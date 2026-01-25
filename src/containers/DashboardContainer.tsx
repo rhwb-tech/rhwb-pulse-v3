@@ -125,7 +125,7 @@ const DashboardContainer: React.FC = () => {
 
       prevSeasonRef.current = currentSeason;
     }
-  }, [filterState.season, filterDrawerOpen, userRole]);
+  }, [filterState.season, filterState.selectedRunner, filterDrawerOpen, userRole]);
 
   // Close filter panel when a runner is selected (for non-runner roles)
   useEffect(() => {
