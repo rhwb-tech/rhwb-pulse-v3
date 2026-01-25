@@ -66,6 +66,10 @@ export const useDashboardData = (
   
   // Track runner fetching - use a fetch ID to handle cancellation properly
   const runnerFetchIdRef = useRef(0);
+  
+  // Track if lists have been cleared for runner role to prevent infinite loops
+  const runnerListsClearedRef = useRef(false);
+  const lastRunnerRoleRef = useRef<UserRole | undefined>(undefined);
 
   const [cumulativeScore, setCumulativeScore] = useState<number | null>(null);
   const [activitySummary, setActivitySummary] = useState<{
@@ -299,12 +303,19 @@ export const useDashboardData = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [season, userRole, hybridToggle, coachName]);
 
-  // EFFECT 4: Clear lists for runner role
+  // EFFECT 4: Clear lists for runner role (only once when role changes to runner)
   useEffect(() => {
-    if (userRole === 'runner') {
+    // Only clear lists if role changed to runner and we haven't cleared them yet
+    if (userRole === 'runner' && lastRunnerRoleRef.current !== 'runner') {
       console.log('[DASHBOARD DATA] User is runner, clearing lists');
       setCoachList([]);
       setRunnerList([]);
+      runnerListsClearedRef.current = true;
+      lastRunnerRoleRef.current = 'runner';
+    } else if (userRole !== 'runner') {
+      // Reset the flag when role changes away from runner
+      runnerListsClearedRef.current = false;
+      lastRunnerRoleRef.current = userRole;
     }
   }, [userRole, setCoachList, setRunnerList]);
 
@@ -459,7 +470,7 @@ export const useDashboardData = (
       return;
     }
 
-    if (!rows) {
+    if (!rows || rows.length === 0) {
       setActivitySummary({
         mileage: { percent: null, planned: null, completed: null },
         strength: { percent: null, planned: null, completed: null }
@@ -467,24 +478,46 @@ export const useDashboardData = (
       return;
     }
 
-    let mileage = { percent: null, planned: null, completed: null };
-    let strength = { percent: null, planned: null, completed: null };
+    // Aggregate totals across all mesos for each category
+    let totalMileagePlanned = 0;
+    let totalMileageCompleted = 0;
+    let totalStrengthPlanned = 0;
+    let totalStrengthCompleted = 0;
+
     for (const row of rows) {
+      const planned = typeof row.planned === 'number' ? row.planned : parseFloat(row.planned || '0');
+      const completed = typeof row.completed === 'number' ? row.completed : parseFloat(row.completed || '0');
+
       if (row.category === 'Mileage') {
-        mileage = {
-          percent: row.percent_completed,
-          planned: row.planned,
-          completed: row.completed
-        };
+        totalMileagePlanned += planned;
+        totalMileageCompleted += completed;
       }
       if (row.category === 'Strength') {
-        strength = {
-          percent: row.percent_completed,
-          planned: row.planned,
-          completed: row.completed
-        };
+        totalStrengthPlanned += planned;
+        totalStrengthCompleted += completed;
       }
     }
+
+    // Calculate percentages based on totals
+    const mileagePercent = totalMileagePlanned > 0 
+      ? Math.round((totalMileageCompleted / totalMileagePlanned) * 100 * 10) / 10 
+      : 0;
+    const strengthPercent = totalStrengthPlanned > 0 
+      ? Math.round((totalStrengthCompleted / totalStrengthPlanned) * 100 * 10) / 10 
+      : 0;
+
+    const mileage = {
+      percent: mileagePercent,
+      planned: totalMileagePlanned,
+      completed: totalMileageCompleted
+    };
+
+    const strength = {
+      percent: strengthPercent,
+      planned: totalStrengthPlanned,
+      completed: totalStrengthCompleted
+    };
+
     setActivitySummary({ mileage, strength });
   }, [selectedRunner, email, season]);
 
