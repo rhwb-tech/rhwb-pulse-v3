@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Fab, Drawer, Typography, IconButton } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
@@ -9,6 +9,8 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useMenuHandlers } from '../hooks/useMenuHandlers';
 import FilterChips from '../components/dashboard/FilterChips';
 import DashboardWidgets from '../components/dashboard/DashboardWidgets';
+
+const FILTER_PANEL_STORAGE_KEY = 'rhwb_pulse_filter_panel_open';
 
 const DashboardContainer: React.FC = () => {
   const { user } = useAuth();
@@ -37,8 +39,17 @@ const DashboardContainer: React.FC = () => {
     }
   }, [user, effectiveEmail, isOverrideActive, overrideEmail, userRole]);
 
-  // Filter drawer state
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  // Filter drawer state - always open on initial load, but persist manual closes
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(true);
+
+  // Persist filter panel state to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTER_PANEL_STORAGE_KEY, String(filterDrawerOpen));
+    } catch (error) {
+      console.warn('[DASHBOARD CONTAINER] Failed to save filter panel state:', error);
+    }
+  }, [filterDrawerOpen]);
 
   // Filter state
   const filterState = useFilterState(userRole);
@@ -73,6 +84,30 @@ const DashboardContainer: React.FC = () => {
     dashboardData.searchRunners,
     email
   );
+
+  // Track previous runner selection to detect changes
+  const prevRunnerRef = useRef<string>('');
+  const isInitialMountRef = useRef(true);
+
+  // Close filter panel when a runner is selected (but not on initial mount)
+  useEffect(() => {
+    // Skip on initial mount to avoid closing panel if runner was already selected
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      prevRunnerRef.current = filterState.selectedRunner;
+      return;
+    }
+
+    const currentRunner = filterState.selectedRunner;
+    const prevRunner = prevRunnerRef.current;
+
+    // If runner changed to a non-empty value and panel is open, close it
+    if (currentRunner && currentRunner !== prevRunner && filterDrawerOpen) {
+      setFilterDrawerOpen(false);
+    }
+
+    prevRunnerRef.current = currentRunner;
+  }, [filterState.selectedRunner, filterDrawerOpen]);
 
   return (
     <>

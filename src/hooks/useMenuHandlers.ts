@@ -74,21 +74,15 @@ export const useMenuHandlers = (
 
   const handleCoachChange = (coach: string) => {
     setSelectedCoach(coach);
-    if (runnerList.length > 0) {
-      setSelectedRunner(runnerList[0].value);
-    } else {
-      setSelectedRunner('');
-    }
+    // Clear runner selection - user must manually select a runner
+    setSelectedRunner('');
   };
 
   const handleCoachChangeFromChip = (newCoach: string) => {
     setSelectedCoach(newCoach);
     setCoachMenuAnchor(null);
-    if (runnerList.length > 0) {
-      setSelectedRunner(runnerList[0].value);
-    } else {
-      setSelectedRunner('');
-    }
+    // Clear runner selection - user must manually select a runner
+    setSelectedRunner('');
   };
 
   // Runner handlers

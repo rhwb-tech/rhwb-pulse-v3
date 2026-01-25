@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { supabaseValidation } from '../components/supabaseClient';
+import { supabase } from '../components/supabaseClient';
 import type { UserRole } from '../types/user';
 
 interface Option {
@@ -129,16 +129,13 @@ export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFro
       try {
         console.log('[FILTER STATE] Fetching seasons from database...');
 
-        // Query distinct seasons from rhwb_meso_scores table
-        // Use supabaseValidation to avoid hanging (no session persistence)
-        const { data, error } = await supabaseValidation
-          .from('rhwb_meso_scores')
-          .select('season')
-          .order('season', { ascending: false });
-
+        // Query distinct seasons using RPC function
+        // This is more efficient than sampling from multiple offsets
+        const { data, error } = await supabase.rpc('get_distinct_seasons');
+        const seasonData = data as { season: string }[] | null;
+        
         if (error) {
           console.error('[FILTER STATE] Error fetching seasons:', error);
-          // Fallback to hardcoded seasons if fetch fails
           const fallbackSeasons = [
             { value: '14', label: 'Season 14' },
             { value: '13', label: 'Season 13' }
@@ -148,7 +145,7 @@ export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFro
           return;
         }
 
-        if (!data || data.length === 0) {
+        if (!seasonData || seasonData.length === 0) {
           console.warn('[FILTER STATE] No seasons found in database');
           const fallbackSeasons = [
             { value: '14', label: 'Season 14' },
@@ -159,23 +156,21 @@ export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFro
           return;
         }
 
-        // Get unique seasons and extract the season number
-        const uniqueSeasons = Array.from(new Set(data.map(row => row.season)))
-          .filter(Boolean)
-          .map(seasonStr => {
-            // Extract season number from "Season X" format
+        // RPC function already returns distinct seasons, sorted descending
+        // Extract season number from "Season X" format and format for dropdown
+        const seasonOpts = seasonData
+          .filter(row => row.season) // Filter out any null/empty values
+          .map(row => {
+            const seasonStr = row.season;
             const match = seasonStr.match(/Season\s+(\d+)/i);
             const seasonNum = match ? match[1] : seasonStr;
             return {
               value: seasonNum,
-              label: seasonStr,
-              numericValue: parseInt(seasonNum, 10) || 0
+              label: seasonStr
             };
-          })
-          .sort((a, b) => b.numericValue - a.numericValue); // Sort descending (most recent first)
+          });
 
-        const seasonOpts = uniqueSeasons.map(s => ({ value: s.value, label: s.label }));
-        console.log('[FILTER STATE] Loaded seasons:', seasonOpts);
+        console.log('[FILTER STATE] Loaded seasons from RPC:', seasonOpts);
 
         setSeasonOptions(seasonOpts);
 
@@ -201,12 +196,7 @@ export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFro
     fetchSeasons();
   }, []);
 
-  // Auto-select first runner when admin selects a coach
-  useEffect(() => {
-    if (userRole === 'admin' && selectedCoach && runnerList.length > 0 && !selectedRunner) {
-      setSelectedRunner(runnerList[0].value);
-    }
-  }, [userRole, selectedCoach, runnerList, selectedRunner]);
+  // Don't auto-select runner when coach is selected - wait for user to choose
 
   // Auto-select first runner when coach user loads
   useEffect(() => {
