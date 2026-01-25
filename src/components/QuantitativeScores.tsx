@@ -245,7 +245,7 @@ const QuantitativeScores: React.FC<QuantitativeScoresProps> = ({ data }) => {
           margin={{
             top: 10,
             right: isMobile ? 20 : 30,
-            left: isMobile ? -5 : 10,
+            left: isMobile ? 5 : 15,
             bottom: 10
           }}
           layout="vertical"
@@ -290,13 +290,68 @@ const QuantitativeScores: React.FC<QuantitativeScoresProps> = ({ data }) => {
           <YAxis
             dataKey="meso"
             type="category"
-            width={isMobile ? 45 : 55}
+            width={isMobile ? 60 : 70}
             stroke="#999"
             style={{
               fontSize: isMobile ? '0.8rem' : '0.875rem',
               fontWeight: 600
             }}
-            tick={{ fill: '#444' }}
+            tick={(props: any) => {
+              const { x, y, payload } = props;
+              // Parse the meso label (e.g., "Meso 1" -> ["Meso", "1"] or "Meso2" -> ["Meso", "2"])
+              // Ensure payload.value is converted to a string
+              const mesoText = String(payload?.value || '');
+              
+              // Check if mesoText is a valid string before calling match
+              if (typeof mesoText === 'string' && mesoText.length > 0) {
+                const match = mesoText.match(/^(Meso)\s*(\d+)$/i);
+                
+                if (match) {
+                  const [, prefix, number] = match;
+                  return (
+                    <g transform={`translate(${x},${y})`}>
+                      <text
+                        x={0}
+                        y={0}
+                        dy={-4}
+                        textAnchor="end"
+                        fill="#444"
+                        fontSize={isMobile ? '0.8rem' : '0.875rem'}
+                        fontWeight={600}
+                      >
+                        {prefix}
+                      </text>
+                      <text
+                        x={0}
+                        y={0}
+                        dy={12}
+                        textAnchor="end"
+                        fill="#444"
+                        fontSize={isMobile ? '0.8rem' : '0.875rem'}
+                        fontWeight={600}
+                      >
+                        {number}
+                      </text>
+                    </g>
+                  );
+                }
+              }
+              
+              // Fallback for labels that don't match the pattern or are invalid
+              return (
+                <text
+                  x={x}
+                  y={y}
+                  dy={4}
+                  textAnchor="end"
+                  fill="#444"
+                  fontSize={isMobile ? '0.8rem' : '0.875rem'}
+                  fontWeight={600}
+                >
+                  {mesoText}
+                </text>
+              );
+            }}
           />
 
           <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0, 0, 0, 0.03)' }} />

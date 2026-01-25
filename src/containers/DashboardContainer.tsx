@@ -86,29 +86,67 @@ const DashboardContainer: React.FC = () => {
     email
   );
 
-  // Track previous runner selection to detect changes
+  // Ref for charts container to focus/scroll to when filter panel closes
+  const chartsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Track previous selections to detect changes
   const prevRunnerRef = useRef<string>('');
+  const prevSeasonRef = useRef<string>('');
   const isInitialMountRef = useRef(true);
 
-  // Close filter panel when a runner is selected (but not on initial mount)
+  // Close filter panel when season is selected (for runner role only)
   useEffect(() => {
-    // Skip on initial mount to avoid closing panel if runner was already selected
+    // Initialize refs on first run
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
+      prevSeasonRef.current = filterState.season;
       prevRunnerRef.current = filterState.selectedRunner;
       return;
     }
 
-    const currentRunner = filterState.selectedRunner;
-    const prevRunner = prevRunnerRef.current;
+    // For runner role: close panel when season changes
+    if (userRole === 'runner') {
+      const currentSeason = filterState.season;
+      const prevSeason = prevSeasonRef.current;
 
-    // If runner changed to a non-empty value and panel is open, close it
-    if (currentRunner && currentRunner !== prevRunner && filterDrawerOpen) {
-      setFilterDrawerOpen(false);
+      // If season changed to a non-empty value and panel is open, close it and focus charts
+      if (currentSeason && currentSeason !== prevSeason && filterDrawerOpen) {
+        setFilterDrawerOpen(false);
+        
+        // Move focus to charts after a brief delay to allow panel to close
+        setTimeout(() => {
+          if (chartsContainerRef.current) {
+            chartsContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Also focus the container for keyboard navigation
+            chartsContainerRef.current.focus();
+          }
+        }, 100);
+      }
+
+      prevSeasonRef.current = currentSeason;
+    }
+  }, [filterState.season, filterDrawerOpen, userRole]);
+
+  // Close filter panel when a runner is selected (for non-runner roles)
+  useEffect(() => {
+    // Skip on initial mount (refs will be initialized by the season effect)
+    if (isInitialMountRef.current) {
+      return;
     }
 
-    prevRunnerRef.current = currentRunner;
-  }, [filterState.selectedRunner, filterDrawerOpen]);
+    // For non-runner roles: close panel when runner is selected
+    if (userRole !== 'runner' && userRole !== undefined) {
+      const currentRunner = filterState.selectedRunner;
+      const prevRunner = prevRunnerRef.current;
+
+      // If runner changed to a non-empty value and panel is open, close it
+      if (currentRunner && currentRunner !== prevRunner && filterDrawerOpen) {
+        setFilterDrawerOpen(false);
+      }
+
+      prevRunnerRef.current = currentRunner; // Update previous runner for next comparison
+    }
+  }, [filterState.selectedRunner, filterDrawerOpen, userRole]);
 
   // Format the last data refresh date
   const formatRefreshDate = (dateStr: string | null) => {
@@ -241,15 +279,17 @@ const DashboardContainer: React.FC = () => {
         </Box>
 
         {/* Dashboard Widgets */}
-        <DashboardWidgets
-          loading={dashboardData.loading}
-          error={dashboardData.error}
-          data={dashboardData.data}
-          cumulativeScore={dashboardData.cumulativeScore}
-          activitySummary={dashboardData.activitySummary}
-          trainingFeedback={dashboardData.trainingFeedback}
-          userEmail={email}
-        />
+        <Box ref={chartsContainerRef} tabIndex={-1} sx={{ outline: 'none' }}>
+          <DashboardWidgets
+            loading={dashboardData.loading}
+            error={dashboardData.error}
+            data={dashboardData.data}
+            cumulativeScore={dashboardData.cumulativeScore}
+            activitySummary={dashboardData.activitySummary}
+            trainingFeedback={dashboardData.trainingFeedback}
+            userEmail={email}
+          />
+        </Box>
       </Box>
 
       {/* Filter FAB Button */}
