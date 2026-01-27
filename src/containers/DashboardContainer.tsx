@@ -211,7 +211,9 @@ const DashboardContainer: React.FC = () => {
                 color: 'white',
                 fontWeight: 600,
                 fontSize: '0.75rem',
+                cursor: 'pointer',
               }}
+              onClick={() => setFilterDrawerOpen(true)}
             />
 
             {/* Show coach for admin/coach/hybrid roles */}
@@ -225,7 +227,9 @@ const DashboardContainer: React.FC = () => {
                   color: 'primary.main',
                   fontWeight: 500,
                   fontSize: '0.75rem',
+                  cursor: 'pointer',
                 }}
+                onClick={() => setFilterDrawerOpen(true)}
               />
             )}
 
@@ -240,7 +244,9 @@ const DashboardContainer: React.FC = () => {
                   color: '#9c27b0',
                   fontWeight: 500,
                   fontSize: '0.75rem',
+                  cursor: 'pointer',
                 }}
+                onClick={() => setFilterDrawerOpen(true)}
               />
             )}
 
@@ -254,7 +260,9 @@ const DashboardContainer: React.FC = () => {
                   color: '#1565c0',
                   fontWeight: 500,
                   fontSize: '0.75rem',
+                  cursor: 'pointer',
                 }}
+                onClick={() => setFilterDrawerOpen(true)}
               />
             )}
           </Box>
@@ -299,13 +307,15 @@ const DashboardContainer: React.FC = () => {
         onClick={() => setFilterDrawerOpen(true)}
         sx={{
           position: 'fixed',
-          bottom: 90,
-          right: 24,
+          // Use safe-area insets so the FAB stays tappable across all iPhones
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)',
+          right: 'calc(env(safe-area-inset-right, 0px) + 24px)',
           background: 'linear-gradient(135deg, #1877F2 0%, #0E5FD3 100%)',
           '&:hover': {
             background: 'linear-gradient(135deg, #0E5FD3 0%, #0A4EB0 100%)',
           },
-          zIndex: 999
+          // Ensure the FAB sits above drawers/modals so taps aren’t blocked
+          zIndex: (theme) => theme.zIndex.modal + 1,
         }}
       >
         <FilterListIcon />
