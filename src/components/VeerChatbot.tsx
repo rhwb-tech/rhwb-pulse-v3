@@ -628,7 +628,11 @@ Format all responses with clear markdown.` + userContext;
       }
 
       const data = await response.json();
-      const responseText = data.candidates[0].content.parts[0].text;
+      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!responseText) {
+        console.error('[VEER] Empty or blocked response:', JSON.stringify(data));
+        throw new Error('No response from Gemini');
+      }
 
       setMessages(prev => [...prev, {
         id: generateId(),
