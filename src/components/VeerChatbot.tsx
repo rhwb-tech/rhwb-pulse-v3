@@ -90,23 +90,26 @@ interface VeerChatbotProps {
   fullPage?: boolean;
 }
 
-// YouTube URL regex
-const YOUTUBE_URL_RE = /https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/[^\s]+/g;
+// YouTube URL regex - only match actual video URLs (with watch?v= or youtu.be/VIDEO_ID)
+const YOUTUBE_URL_RE = /https?:\/\/(www\.)?(youtube\.com\/watch\?[^\s]*v=[a-zA-Z0-9_-]{11}[^\s]*|youtu\.be\/[a-zA-Z0-9_-]{11}[^\s]*)/g;
 
 function extractYouTubeUrls(text: string): string[] {
   return text?.match(YOUTUBE_URL_RE) || [];
 }
 
-function toEmbedUrl(url: string): string {
+function toEmbedUrl(url: string): string | null {
   try {
     const u = new URL(url);
     if (u.hostname.includes('youtu.be')) {
-      return `https://www.youtube.com/embed${u.pathname}`;
+      const videoId = u.pathname.slice(1); // remove leading /
+      if (videoId && videoId.length >= 11) {
+        return `https://www.youtube.com/embed/${videoId.substring(0, 11)}`;
+      }
     }
     const v = u.searchParams.get('v');
     if (v) return `https://www.youtube.com/embed/${v}`;
   } catch { /* ignore */ }
-  return url;
+  return null;
 }
 
 function stripYouTubeUrls(text: string): string {
@@ -901,23 +904,27 @@ Format all responses with clear markdown.` + userContext;
                       </Box>
                       <Collapse in={expandedVideo[videoKey] || false}>
                         <Box sx={{ mt: 0.5 }}>
-                          {youtubeUrls.map((url, vi) => (
-                            <Box
-                              key={vi}
-                              component="iframe"
-                              src={toEmbedUrl(url)}
-                              sx={{
-                                width: '100%',
-                                maxWidth: 400,
-                                height: 225,
-                                border: 'none',
-                                borderRadius: 1,
-                                mt: 0.5
-                              }}
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            />
-                          ))}
+                          {youtubeUrls.map((url, vi) => {
+                            const embedUrl = toEmbedUrl(url);
+                            if (!embedUrl) return null;
+                            return (
+                              <Box
+                                key={vi}
+                                component="iframe"
+                                src={embedUrl}
+                                sx={{
+                                  width: '100%',
+                                  maxWidth: 400,
+                                  height: 225,
+                                  border: 'none',
+                                  borderRadius: 1,
+                                  mt: 0.5
+                                }}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                              />
+                            );
+                          })}
                         </Box>
                       </Collapse>
                     </Box>
