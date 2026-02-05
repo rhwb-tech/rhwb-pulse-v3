@@ -30,6 +30,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import CheckIcon from '@mui/icons-material/Check';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
 import ThumbDownIcon from '@mui/icons-material/ThumbDown';
@@ -164,6 +165,8 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down' | null>>({});
+  const [feedbackComment, setFeedbackComment] = useState<Record<string, string>>({});
+  const [feedbackCommentSaved, setFeedbackCommentSaved] = useState<Record<string, boolean>>({});
 
   // Workout related state
   const [workoutData, setWorkoutData] = useState<{ today: WorkoutRow[]; tomorrow: WorkoutRow[] } | null>(null);
@@ -676,21 +679,64 @@ Format all responses with clear markdown.` + userContext;
     try {
       if (user?.email) {
         if (newType) {
-          await supabase.from('veer_feedback').upsert({
+          // Find the assistant message and the preceding user question
+          const msgIndex = messages.findIndex(m => m.id === messageId);
+          const assistantMessage = messages[msgIndex];
+          let userQuestion = '';
+          if (msgIndex > 0) {
+            // Walk backwards to find the most recent user message before this assistant response
+            for (let i = msgIndex - 1; i >= 0; i--) {
+              if (messages[i].role === 'user') {
+                userQuestion = messages[i].content;
+                break;
+              }
+            }
+          }
+
+          const { error: upsertError } = await supabase.from('veer_feedback').upsert({
             message_id: messageId,
-            email_id: user.email.toLowerCase(),
+            username: user.email.toLowerCase(),
             feedback: newType,
+            user_question: userQuestion || null,
+            assistant_response: assistantMessage?.content || null,
             created_at: new Date().toISOString()
-          }, { onConflict: 'message_id,email_id' });
+          }, { onConflict: 'message_id,username' });
+          if (upsertError) {
+            console.error('[VEER] Feedback upsert error:', upsertError.message, upsertError.details, upsertError.hint);
+          }
         } else {
           await supabase.from('veer_feedback')
             .delete()
             .eq('message_id', messageId)
-            .eq('email_id', user.email.toLowerCase());
+            .eq('username', user.email.toLowerCase());
         }
       }
     } catch (err) {
       console.error('[VEER] Error storing feedback:', err);
+    }
+  };
+
+  // Save feedback comment
+  const saveFeedbackComment = async (messageId: string) => {
+    const comment = feedbackComment[messageId]?.trim();
+    if (!comment || !user?.email) return;
+
+    try {
+      const { error: commentError } = await supabase.from('veer_feedback')
+        .update({ comment })
+        .eq('message_id', messageId)
+        .eq('username', user.email.toLowerCase());
+
+      if (commentError) {
+        console.error('[VEER] Feedback comment error:', commentError.message);
+      } else {
+        setFeedbackCommentSaved(prev => ({ ...prev, [messageId]: true }));
+        setTimeout(() => {
+          setFeedbackCommentSaved(prev => ({ ...prev, [messageId]: false }));
+        }, 2000);
+      }
+    } catch (err) {
+      console.error('[VEER] Error saving feedback comment:', err);
     }
   };
 
@@ -1149,21 +1195,57 @@ Format all responses with clear markdown.` + userContext;
                 {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Typography>
               {message.role === 'assistant' && (
-                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleFeedback(message.id, 'up')}
-                    sx={{ p: 0.5, color: feedback[message.id] === 'up' ? '#1877F2' : '#999' }}
-                  >
-                    {feedback[message.id] === 'up' ? <ThumbUpIcon fontSize="small" /> : <ThumbUpOutlinedIcon fontSize="small" />}
-                  </IconButton>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleFeedback(message.id, 'down')}
-                    sx={{ p: 0.5, color: feedback[message.id] === 'down' ? '#d32f2f' : '#999' }}
-                  >
-                    {feedback[message.id] === 'down' ? <ThumbDownIcon fontSize="small" /> : <ThumbDownOutlinedIcon fontSize="small" />}
-                  </IconButton>
+                <Box sx={{ mt: 0.5 }}>
+                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleFeedback(message.id, 'up')}
+                      sx={{ p: 0.5, color: feedback[message.id] === 'up' ? '#1877F2' : '#999' }}
+                    >
+                      {feedback[message.id] === 'up' ? <ThumbUpIcon fontSize="small" /> : <ThumbUpOutlinedIcon fontSize="small" />}
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleFeedback(message.id, 'down')}
+                      sx={{ p: 0.5, color: feedback[message.id] === 'down' ? '#d32f2f' : '#999' }}
+                    >
+                      {feedback[message.id] === 'down' ? <ThumbDownIcon fontSize="small" /> : <ThumbDownOutlinedIcon fontSize="small" />}
+                    </IconButton>
+                  </Box>
+                  <Collapse in={feedback[message.id] != null}>
+                    <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, alignItems: 'flex-start' }}>
+                      <TextField
+                        size="small"
+                        placeholder="Add a comment (optional)"
+                        value={feedbackComment[message.id] || ''}
+                        onChange={(e) => setFeedbackComment(prev => ({ ...prev, [message.id]: e.target.value }))}
+                        multiline
+                        maxRows={3}
+                        sx={{
+                          flex: 1,
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 1.5,
+                            fontSize: '0.75rem',
+                          },
+                          '& .MuiOutlinedInput-input': {
+                            py: 0.75,
+                            px: 1,
+                          },
+                        }}
+                      />
+                      <IconButton
+                        size="small"
+                        onClick={() => saveFeedbackComment(message.id)}
+                        disabled={!feedbackComment[message.id]?.trim()}
+                        sx={{
+                          color: feedbackCommentSaved[message.id] ? '#4caf50' : '#1877F2',
+                          '&:disabled': { color: '#ccc' },
+                        }}
+                      >
+                        {feedbackCommentSaved[message.id] ? <CheckIcon fontSize="small" /> : <SendIcon fontSize="small" />}
+                      </IconButton>
+                    </Box>
+                  </Collapse>
                 </Box>
               )}
             </Paper>
