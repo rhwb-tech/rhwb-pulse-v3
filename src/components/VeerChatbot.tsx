@@ -731,9 +731,7 @@ Format all responses with clear markdown.` + userContext;
         console.error('[VEER] Feedback comment error:', commentError.message);
       } else {
         setFeedbackCommentSaved(prev => ({ ...prev, [messageId]: true }));
-        setTimeout(() => {
-          setFeedbackCommentSaved(prev => ({ ...prev, [messageId]: false }));
-        }, 2000);
+        setTimeout(() => inputRef.current?.focus(), 100);
       }
     } catch (err) {
       console.error('[VEER] Error saving feedback comment:', err);
@@ -1212,7 +1210,7 @@ Format all responses with clear markdown.` + userContext;
                       {feedback[message.id] === 'down' ? <ThumbDownIcon fontSize="small" /> : <ThumbDownOutlinedIcon fontSize="small" />}
                     </IconButton>
                   </Box>
-                  <Collapse in={feedback[message.id] != null}>
+                  <Collapse in={feedback[message.id] != null && !feedbackCommentSaved[message.id]}>
                     <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, alignItems: 'flex-start' }}>
                       <TextField
                         size="small"
