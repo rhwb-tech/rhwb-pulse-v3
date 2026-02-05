@@ -10,7 +10,7 @@ import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
 import { supabase } from './supabaseClient';
 import { useNavigate, useLocation } from 'react-router-dom';
-// import GeminiChatBot from './GeminiChatBot';
+import VeerChatbot from './VeerChatbot';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -798,8 +798,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </Alert>
       </Snackbar>
 
-      {/* Gemini AI Chatbot - Disabled for now */}
-      {/* <GeminiChatBot /> */}
+      {/* Veer AI Chatbot - hide on /veer route since VeerFullPage renders it */}
+      {location.pathname !== '/veer' && <VeerChatbot />}
     </Box>
   );
 };

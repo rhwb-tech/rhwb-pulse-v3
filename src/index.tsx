@@ -10,6 +10,14 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import AuthCallback from './components/AuthCallback';
 import UserProfile from './components/UserProfile';
+import VeerFullPage from './components/VeerFullPage';
+
+// Suppress benign ResizeObserver loop error (common with MUI components)
+window.addEventListener('error', (e: ErrorEvent) => {
+  if (e.message === 'ResizeObserver loop completed with undelivered notifications.') {
+    e.stopImmediatePropagation();
+  }
+});
 
 const theme = createTheme();
 
@@ -25,6 +33,7 @@ root.render(
             <Routes>
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+              <Route path="/veer" element={<ProtectedRoute><VeerFullPage /></ProtectedRoute>} />
               <Route path="/" element={<ProtectedRoute><App /></ProtectedRoute>} />
             </Routes>
           </AppProvider>
