@@ -280,7 +280,12 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
       const today = new Date();
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const fmt = (d: Date) => d.toISOString().split('T')[0];
+      const fmt = (d: Date) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      };
 
       const { data, error } = await supabase
         .from('veer_user_workouts')
@@ -345,9 +350,7 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
             );
             if (forecastRes.ok) {
               const forecast = await forecastRes.json();
-              const tomorrowDate = new Date();
-              tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-              const tomorrowDateStr = tomorrowDate.toISOString().split('T')[0];
+              const tomorrowDateStr = fmt(tomorrow);
 
               const tomorrowForecasts = forecast.list?.filter((f: { dt_txt: string }) =>
                 f.dt_txt.startsWith(tomorrowDateStr)
