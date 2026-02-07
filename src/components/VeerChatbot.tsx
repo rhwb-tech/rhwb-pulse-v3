@@ -1217,7 +1217,7 @@ Format all responses with clear markdown.` + userContext;
                       {feedback[message.id] === 'down' ? <ThumbDownIcon fontSize="small" /> : <ThumbDownOutlinedIcon fontSize="small" />}
                     </IconButton>
                   </Box>
-                  <Collapse in={feedback[message.id] != null && !feedbackCommentSaved[message.id]}>
+                  <Collapse in={feedback[message.id] === 'down' && !feedbackCommentSaved[message.id]}>
                     <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, alignItems: 'flex-start' }}>
                       <TextField
                         size="small"
