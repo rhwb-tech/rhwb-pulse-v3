@@ -521,40 +521,75 @@ export const useDashboardData = (
     setActivitySummary({ mileage, strength });
   }, [selectedRunner, email, season]);
 
-  // Fetch training feedback
+  // Fetch training feedback via Edge Function (qual scores stored in Cloud SQL for HIPAA)
   const fetchTrainingFeedback = useCallback(async () => {
     const runnerEmail = selectedRunner || email;
-    if (!runnerEmail) {
+    if (!runnerEmail || !season) {
       setTrainingFeedback([]);
       return;
     }
 
-    const { data: rows, error } = await supabase
-      .from('v_rhwb_meso_scores')
-      .select('meso, qual')
-      .eq('season', `Season ${season}`)
-      .eq('email_id', runnerEmail)
-      .eq('category', 'Personal')
-      .not('qual', 'is', null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.error('No active session for training feedback fetch');
+        setTrainingFeedback([]);
+        return;
+      }
 
-    if (error) {
-      console.error('Error fetching training feedback:', error);
-      setError('Unable to load training feedback. Please try again.');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const response = await fetch(
+        `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/get-qual-scores`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY!,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            season: `Season ${season}`,
+            runnerEmail,
+          }),
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.error('Error fetching training feedback:', response.status);
+        setError('Unable to load training feedback. Please try again.');
+        setTrainingFeedback([]);
+        return;
+      }
+
+      const result = await response.json();
+      const rows: Array<{ meso: string; qual: string }> = result.data || [];
+
+      if (rows.length === 0) {
+        setTrainingFeedback([]);
+        return;
+      }
+
+      // Data comes pre-sorted from the API, but sort client-side as safety net
+      const sortedRows = rows.sort((a, b) => {
+        const mesoA = parseInt(a.meso.replace(/[^0-9]/g, ''), 10);
+        const mesoB = parseInt(b.meso.replace(/[^0-9]/g, ''), 10);
+        return mesoB - mesoA;
+      });
+      setTrainingFeedback(sortedRows);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.error('Training feedback fetch timed out');
+      } else {
+        console.error('Error fetching training feedback:', err);
+      }
+      // Degrade gracefully — other widgets still work
       setTrainingFeedback([]);
-      return;
     }
-
-    if (!rows) {
-      setTrainingFeedback([]);
-      return;
-    }
-
-    const sortedRows = rows.sort((a, b) => {
-      const mesoA = parseInt(a.meso.replace(/[^0-9]/g, ''), 10);
-      const mesoB = parseInt(b.meso.replace(/[^0-9]/g, ''), 10);
-      return mesoB - mesoA;
-    });
-    setTrainingFeedback(sortedRows);
   }, [selectedRunner, email, season]);
 
   // On initial app load

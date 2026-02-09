@@ -1,0 +1,13 @@
+{
+  "name": "qual-scores-api",
+  "version": "1.0.0",
+  "description": "Cloud Run service for HIPAA-compliant qual score storage",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "pg": "^8.13.0"
+  }
+}
