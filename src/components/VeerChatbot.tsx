@@ -440,24 +440,22 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
 
     const lines: string[] = ['--- CURRENT USER CONTEXT ---'];
 
-    // Keys to skip (these are workout-specific fields handled separately below)
+    // Keys to skip: workout-specific fields (handled separately) + PII fields (never send to LLM)
     const skipKeys = new Set([
       'id', 'created_at', 'updated_at', 'workout_name', 'description',
-      'planned_distance', 'workout_date'
+      'planned_distance', 'workout_date',
+      // PII fields - never send to LLM
+      'email_id', 'first_name', 'last_name', 'runner_name',
+      'zip', 'gender', 'coach_email', 'phone_no', 'address',
+      'city', 'state', 'country', 'dob', 'runner_id',
+      'profile_picture', 'referred_by', 'referred_by_email_id',
     ]);
 
-    // Friendly label mapping for known keys
+    // Friendly label mapping for non-PII keys sent to LLM
     const labelMap: Record<string, string> = {
-      first_name: 'First Name',
-      last_name: 'Last Name',
-      email_id: 'Email',
-      zip: 'Location (ZIP)',
       fitness_level: 'Fitness Level',
       goals: 'Current Goal',
       subscription_tier: 'Subscription Tier',
-      coach_name: 'Coach',
-      coach: 'Coach',
-      coach_email: 'Coach Email',
       season: 'Season',
       meso: 'Meso',
       week_number: 'Week',
@@ -467,6 +465,8 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
       level: 'Level',
       pace_zone: 'Pace Zone',
       target_pace: 'Target Pace',
+      race_distance: 'Race Distance',
+      program_type: 'Program Type',
     };
 
     // Dynamically include all non-empty fields from the user profile row
@@ -683,8 +683,9 @@ Format all responses with clear markdown.` + userContext;
     const newType = current === type ? null : type;
     setFeedback(prev => ({ ...prev, [messageId]: newType }));
 
+    const runnerId = userProfileData?.runner_id;
     try {
-      if (user?.email) {
+      if (runnerId) {
         if (newType) {
           // Find the assistant message and the preceding user question
           const msgIndex = messages.findIndex(m => m.id === messageId);
@@ -702,12 +703,12 @@ Format all responses with clear markdown.` + userContext;
 
           const { error: upsertError } = await supabase.from('veer_feedback').upsert({
             message_id: messageId,
-            username: user.email.toLowerCase(),
+            runner_id: runnerId,
             feedback: newType,
             user_question: userQuestion || null,
             assistant_response: assistantMessage?.content || null,
             created_at: new Date().toISOString()
-          }, { onConflict: 'message_id,username' });
+          }, { onConflict: 'message_id,runner_id' });
           if (upsertError) {
             console.error('[VEER] Feedback upsert error:', upsertError.message, upsertError.details, upsertError.hint);
           }
@@ -715,7 +716,7 @@ Format all responses with clear markdown.` + userContext;
           await supabase.from('veer_feedback')
             .delete()
             .eq('message_id', messageId)
-            .eq('username', user.email.toLowerCase());
+            .eq('runner_id', runnerId);
         }
       }
     } catch (err) {
@@ -726,13 +727,14 @@ Format all responses with clear markdown.` + userContext;
   // Save feedback comment
   const saveFeedbackComment = async (messageId: string) => {
     const comment = feedbackComment[messageId]?.trim();
-    if (!comment || !user?.email) return;
+    const runnerId = userProfileData?.runner_id;
+    if (!comment || !runnerId) return;
 
     try {
       const { error: commentError } = await supabase.from('veer_feedback')
         .update({ comment })
         .eq('message_id', messageId)
-        .eq('username', user.email.toLowerCase());
+        .eq('runner_id', runnerId);
 
       if (commentError) {
         console.error('[VEER] Feedback comment error:', commentError.message);
