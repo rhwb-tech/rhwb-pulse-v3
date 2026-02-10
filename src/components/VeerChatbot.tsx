@@ -209,39 +209,65 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
       const userEmail = user.email!.toLowerCase();
       const role = user.role;
 
-      // Determine which table to query based on role
-      let tableName = 'runners_profile';
-      if (role === 'admin') tableName = 'rhwb_admin';
-      else if (role === 'coach' || role === 'hybrid') tableName = 'rhwb_coaches';
+      // Admin table has different columns (admin_name instead of first_name/last_name)
+      if (role === 'admin') {
+        try {
+          const { data } = await supabase
+            .from('rhwb_admin')
+            .select('profile_picture, admin_name')
+            .eq('email_id', userEmail)
+            .single();
 
-      try {
-        const { data, error } = await supabase
-          .from(tableName)
-          .select('profile_picture, first_name, last_name')
-          .eq('email_id', userEmail)
-          .single();
+          if (data?.profile_picture) setProfilePicture(data.profile_picture);
+          if (data?.admin_name) setDisplayName(data.admin_name);
+          return;
+        } catch {
+          return;
+        }
+      }
 
-        if (error || !data) {
-          // If no profile found in role-specific table, try runners_profile as fallback
-          if (tableName !== 'runners_profile') {
+      // Coach/hybrid: rhwb_coaches has 'coach' (name) not first_name/last_name
+      if (role === 'coach' || role === 'hybrid') {
+        try {
+          const { data } = await supabase
+            .from('rhwb_coaches')
+            .select('profile_picture, coach')
+            .eq('email_id', userEmail)
+            .single();
+
+          if (data?.profile_picture) setProfilePicture(data.profile_picture);
+          if (data?.coach) setDisplayName(data.coach);
+
+          // Fallback to runners_profile if no picture in coaches table
+          if (!data?.profile_picture) {
             const { data: runnerData } = await supabase
               .from('runners_profile')
               .select('profile_picture, first_name, last_name')
               .eq('email_id', userEmail)
               .single();
-
-            if (runnerData?.profile_picture) {
-              setProfilePicture(runnerData.profile_picture);
-            }
-            if (runnerData?.first_name) {
+            if (runnerData?.profile_picture) setProfilePicture(runnerData.profile_picture);
+            if (!data?.coach && runnerData?.first_name) {
               const fullName = runnerData.last_name
                 ? `${runnerData.first_name} ${runnerData.last_name}`
                 : runnerData.first_name;
               setDisplayName(fullName);
             }
           }
-          return;
+        } catch (err) {
+          console.error('[VEER] Error fetching coach profile:', err);
         }
+        return;
+      }
+
+      // Runner: runners_profile has first_name/last_name
+      try {
+        const { data, error } = await supabase
+          .from('runners_profile')
+          .select('profile_picture, first_name, last_name')
+          .eq('email_id', userEmail)
+          .single();
+
+        if (error || !data) return;
 
         if (data.profile_picture) {
           setProfilePicture(data.profile_picture);
