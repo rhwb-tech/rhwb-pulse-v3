@@ -33,7 +33,7 @@ root.render(
             <Routes>
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
-              <Route path="/veer" element={<ProtectedRoute><VeerFullPage /></ProtectedRoute>} />
+              {/* <Route path="/veer" element={<ProtectedRoute><VeerFullPage /></ProtectedRoute>} /> */}
               <Route path="/" element={<ProtectedRoute><App /></ProtectedRoute>} />
             </Routes>
           </AppProvider>

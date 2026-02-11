@@ -798,8 +798,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </Alert>
       </Snackbar>
 
-      {/* Veer AI Chatbot - hide on /veer route since VeerFullPage renders it */}
-      {location.pathname !== '/veer' && <VeerChatbot />}
+      {/* Veer AI Chatbot - temporarily hidden for production rollout */}
+      {/* {location.pathname !== '/veer' && <VeerChatbot />} */}
     </Box>
   );
 };
