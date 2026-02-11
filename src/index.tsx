@@ -10,7 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import AuthCallback from './components/AuthCallback';
 import UserProfile from './components/UserProfile';
-import VeerFullPage from './components/VeerFullPage';
+// import VeerFullPage from './components/VeerFullPage';
 
 // Suppress benign ResizeObserver loop error (common with MUI components)
 window.addEventListener('error', (e: ErrorEvent) => {

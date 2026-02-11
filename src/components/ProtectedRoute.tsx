@@ -10,7 +10,7 @@ import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
 import { supabase } from './supabaseClient';
 import { useNavigate, useLocation } from 'react-router-dom';
-import VeerChatbot from './VeerChatbot';
+// import VeerChatbot from './VeerChatbot';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
