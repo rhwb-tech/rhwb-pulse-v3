@@ -65,6 +65,95 @@ app.post('/get-qual-scores', validateApiKey, async (req, res) => {
   }
 });
 
+// Get qual scores by runner_ids (used by coach-portal edge function)
+app.post('/get-qual-scores-by-coach', validateApiKey, async (req, res) => {
+  try {
+    const { runner_ids, season, meso } = req.body;
+
+    if (!runner_ids || !Array.isArray(runner_ids) || runner_ids.length === 0) {
+      return res.status(400).json({ error: 'runner_ids array is required' });
+    }
+    if (!season || typeof season !== 'string') {
+      return res.status(400).json({ error: 'season string is required' });
+    }
+
+    const limitedIds = runner_ids.slice(0, 200);
+
+    let query, params;
+    if (meso) {
+      query = `SELECT runner_id, meso, qual_score
+               FROM qual_scores
+               WHERE runner_id = ANY($1::uuid[]) AND season = $2 AND meso = $3
+                 AND qual_score IS NOT NULL AND qual_score != ''`;
+      params = [limitedIds, season, meso];
+    } else {
+      query = `SELECT runner_id, meso, qual_score
+               FROM qual_scores
+               WHERE runner_id = ANY($1::uuid[]) AND season = $2
+                 AND qual_score IS NOT NULL AND qual_score != ''
+               ORDER BY CAST(NULLIF(regexp_replace(meso, '\\D', '', 'g'), '') AS INTEGER) DESC`;
+      params = [limitedIds, season];
+    }
+
+    const result = await pool.query(query, params);
+    res.json({ data: result.rows });
+  } catch (err) {
+    console.error('Error fetching qual scores by coach:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get action request comments from Cloud SQL
+app.post('/get-action-comments', validateApiKey, async (req, res) => {
+  try {
+    const { action_request_ids } = req.body;
+
+    if (!action_request_ids || !Array.isArray(action_request_ids) || action_request_ids.length === 0) {
+      return res.status(400).json({ error: 'action_request_ids array is required' });
+    }
+
+    const limitedIds = action_request_ids.slice(0, 500);
+
+    const result = await pool.query(
+      `SELECT action_request_id, comment, action_type, runner_id, requestor_id, season, created_at
+       FROM action_comments
+       WHERE action_request_id = ANY($1::uuid[])`,
+      [limitedIds]
+    );
+
+    res.json({ data: result.rows });
+  } catch (err) {
+    console.error('Error fetching action comments:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Upsert action request comment into Cloud SQL
+app.post('/upsert-action-comment', validateApiKey, async (req, res) => {
+  try {
+    const { action_request_id, runner_id, requestor_id, season, comment, action_type } = req.body;
+
+    if (!action_request_id || !runner_id || !requestor_id || !season || !comment || !action_type) {
+      return res.status(400).json({
+        error: 'action_request_id, runner_id, requestor_id, season, comment, and action_type are required'
+      });
+    }
+
+    await pool.query(
+      `INSERT INTO action_comments (action_request_id, runner_id, requestor_id, season, comment, action_type)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (action_request_id)
+       DO UPDATE SET comment = $5, action_type = $6, updated_at = NOW()`,
+      [action_request_id, runner_id, requestor_id, season, comment, action_type]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error upserting action comment:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Write qual score (for data pipeline use)
 app.post('/upsert-qual-score', validateApiKey, async (req, res) => {
   try {

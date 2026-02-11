@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { supabase } from '../components/supabaseClient';
 import type { UserRole } from '../types/user';
@@ -89,13 +89,13 @@ export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFro
   const [runnerList, setRunnerList] = useState<Option[]>([]);
   const [selectedCoach, setSelectedCoach] = useState('');
   
-  // Wrapper for setCoachList that also saves to cache
-  const setCoachList = (list: Option[]) => {
+  // Wrapper for setCoachList that also saves to cache - memoized to prevent infinite loops
+  const setCoachList = useCallback((list: Option[]) => {
     setCoachListInternal(list);
     if (list.length > 0) {
       saveCachedCoachList(list);
     }
-  };
+  }, []);
   const [selectedRunner, setSelectedRunner] = useState('');
   const [hybridToggle, setHybridToggle] = useState<'myScore' | 'myCohorts'>('myCohorts');
   const [coachName, setCoachName] = useState('');

@@ -79,6 +79,54 @@ Ensure your Supabase database has the necessary tables and RLS policies:
 
 Enable RLS on your tables and create policies that allow users to access data based on their role and email.
 
+#### RLS Policy for `runners_profile` Table
+
+You need to create UPDATE policies that allow users to update their own profile. Here's an example SQL policy:
+
+```sql
+-- Allow users to update their own profile
+CREATE POLICY "Users can update own profile"
+ON runners_profile
+FOR UPDATE
+USING (auth.jwt() ->> 'email' = email_id)
+WITH CHECK (auth.jwt() ->> 'email' = email_id);
+```
+
+Or if you're using Supabase's email from the auth.users table:
+
+```sql
+-- Allow users to update their own profile (using auth.uid())
+CREATE POLICY "Users can update own profile"
+ON runners_profile
+FOR UPDATE
+USING (
+  auth.uid()::text = (
+    SELECT id::text 
+    FROM auth.users 
+    WHERE email = runners_profile.email_id
+  )
+)
+WITH CHECK (
+  auth.uid()::text = (
+    SELECT id::text 
+    FROM auth.users 
+    WHERE email = runners_profile.email_id
+  )
+);
+```
+
+**Important**: Make sure RLS is enabled on the `runners_profile` table:
+```sql
+ALTER TABLE runners_profile ENABLE ROW LEVEL SECURITY;
+```
+
+If you're getting timeout errors when updating `referred_by_email_id` or `referred_by`, it's likely because:
+1. RLS is enabled but no UPDATE policy exists
+2. The UPDATE policy doesn't match the user's authentication context
+3. The policy is too restrictive
+
+Check your Supabase dashboard → Authentication → Policies → `runners_profile` to verify your policies.
+
 ## 6. Testing the Authentication
 
 1. Start the development server: `npm start`
