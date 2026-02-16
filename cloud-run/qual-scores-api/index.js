@@ -178,6 +178,77 @@ app.post('/upsert-qual-score', validateApiKey, async (req, res) => {
   }
 });
 
+// Upsert Veer feedback
+app.post('/upsert-veer-feedback', validateApiKey, async (req, res) => {
+  try {
+    const { message_id, runner_id, feedback, user_question, assistant_response } = req.body;
+
+    if (!message_id || !runner_id || !feedback) {
+      return res.status(400).json({ error: 'message_id, runner_id, and feedback are required' });
+    }
+
+    await pool.query(
+      `INSERT INTO veer_feedback (message_id, runner_id, feedback, user_question, assistant_response)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (message_id, runner_id)
+       DO UPDATE SET feedback = $3, user_question = $4, assistant_response = $5, updated_at = NOW()`,
+      [message_id, runner_id, feedback, user_question || null, assistant_response || null]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error upserting veer feedback:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete Veer feedback
+app.post('/delete-veer-feedback', validateApiKey, async (req, res) => {
+  try {
+    const { message_id, runner_id } = req.body;
+
+    if (!message_id || !runner_id) {
+      return res.status(400).json({ error: 'message_id and runner_id are required' });
+    }
+
+    await pool.query(
+      `DELETE FROM veer_feedback WHERE message_id = $1 AND runner_id = $2`,
+      [message_id, runner_id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting veer feedback:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update Veer feedback comment
+app.post('/update-veer-feedback-comment', validateApiKey, async (req, res) => {
+  try {
+    const { message_id, runner_id, comment } = req.body;
+
+    if (!message_id || !runner_id || !comment) {
+      return res.status(400).json({ error: 'message_id, runner_id, and comment are required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE veer_feedback SET comment = $3, updated_at = NOW()
+       WHERE message_id = $1 AND runner_id = $2`,
+      [message_id, runner_id, comment]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Feedback record not found' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating veer feedback comment:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`qual-scores-api listening on port ${PORT}`);

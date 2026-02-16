@@ -150,6 +150,44 @@ function getSuggestionChips(activity: string, hasWeather: boolean): string[] {
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
+// Helper to call the veer-data Edge Function (all Veer data goes through Cloud SQL)
+async function callVeerEdgeFunction(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('No active session');
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch(
+      `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/veer-data`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY!,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Edge function error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
 const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -313,17 +351,18 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
         return `${y}-${m}-${day}`;
       };
 
-      const { data, error } = await supabase
-        .from('veer_user_workouts')
-        .select('*')
-        .eq('email_id', user.email!.toLowerCase())
-        .in('workout_date', [fmt(today), fmt(tomorrow)]);
-
-      if (error) {
-        console.error('[VEER] Error fetching workouts:', error);
+      let data: WorkoutRow[];
+      try {
+        const result = await callVeerEdgeFunction({
+          action: 'get-workouts',
+          dates: [fmt(today), fmt(tomorrow)],
+        });
+        data = (result.data as WorkoutRow[]) || [];
+      } catch (err) {
+        console.error('[VEER] Error fetching workouts:', err);
         return;
       }
-      if (!data || data.length === 0) return;
+      if (data.length === 0) return;
 
       const name = data[0].first_name || user.email!.split('@')[0];
       const zip = data[0].zip || '';
@@ -709,41 +748,33 @@ Format all responses with clear markdown.` + userContext;
     const newType = current === type ? null : type;
     setFeedback(prev => ({ ...prev, [messageId]: newType }));
 
-    const runnerId = userProfileData?.runner_id;
     try {
-      if (runnerId) {
-        if (newType) {
-          // Find the assistant message and the preceding user question
-          const msgIndex = messages.findIndex(m => m.id === messageId);
-          const assistantMessage = messages[msgIndex];
-          let userQuestion = '';
-          if (msgIndex > 0) {
-            // Walk backwards to find the most recent user message before this assistant response
-            for (let i = msgIndex - 1; i >= 0; i--) {
-              if (messages[i].role === 'user') {
-                userQuestion = messages[i].content;
-                break;
-              }
+      if (newType) {
+        // Find the assistant message and the preceding user question
+        const msgIndex = messages.findIndex(m => m.id === messageId);
+        const assistantMessage = messages[msgIndex];
+        let userQuestion = '';
+        if (msgIndex > 0) {
+          for (let i = msgIndex - 1; i >= 0; i--) {
+            if (messages[i].role === 'user') {
+              userQuestion = messages[i].content;
+              break;
             }
           }
-
-          const { error: upsertError } = await supabase.from('veer_feedback').upsert({
-            message_id: messageId,
-            runner_id: runnerId,
-            feedback: newType,
-            user_question: userQuestion || null,
-            assistant_response: assistantMessage?.content || null,
-            created_at: new Date().toISOString()
-          }, { onConflict: 'message_id,runner_id' });
-          if (upsertError) {
-            console.error('[VEER] Feedback upsert error:', upsertError.message, upsertError.details, upsertError.hint);
-          }
-        } else {
-          await supabase.from('veer_feedback')
-            .delete()
-            .eq('message_id', messageId)
-            .eq('runner_id', runnerId);
         }
+
+        await callVeerEdgeFunction({
+          action: 'upsert-feedback',
+          message_id: messageId,
+          feedback: newType,
+          user_question: userQuestion || null,
+          assistant_response: assistantMessage?.content || null,
+        });
+      } else {
+        await callVeerEdgeFunction({
+          action: 'delete-feedback',
+          message_id: messageId,
+        });
       }
     } catch (err) {
       console.error('[VEER] Error storing feedback:', err);
@@ -753,21 +784,16 @@ Format all responses with clear markdown.` + userContext;
   // Save feedback comment
   const saveFeedbackComment = async (messageId: string) => {
     const comment = feedbackComment[messageId]?.trim();
-    const runnerId = userProfileData?.runner_id;
-    if (!comment || !runnerId) return;
+    if (!comment) return;
 
     try {
-      const { error: commentError } = await supabase.from('veer_feedback')
-        .update({ comment })
-        .eq('message_id', messageId)
-        .eq('runner_id', runnerId);
-
-      if (commentError) {
-        console.error('[VEER] Feedback comment error:', commentError.message);
-      } else {
-        setFeedbackCommentSaved(prev => ({ ...prev, [messageId]: true }));
-        setTimeout(() => inputRef.current?.focus(), 100);
-      }
+      await callVeerEdgeFunction({
+        action: 'update-feedback-comment',
+        message_id: messageId,
+        comment,
+      });
+      setFeedbackCommentSaved(prev => ({ ...prev, [messageId]: true }));
+      setTimeout(() => inputRef.current?.focus(), 100);
     } catch (err) {
       console.error('[VEER] Error saving feedback comment:', err);
     }
