@@ -1,5 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
+const { GoogleAuth } = require('google-auth-library');
 
 const app = express();
 app.use(express.json());
@@ -245,6 +246,53 @@ app.post('/update-veer-feedback-comment', validateApiKey, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating veer feedback comment:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Vertex AI chat proxy (HIPAA-compliant — covered by GCP BAA)
+const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+
+app.post('/veer-chat', validateApiKey, async (req, res) => {
+  try {
+    const { contents, systemInstruction, generationConfig, tools } = req.body;
+
+    if (!contents || !Array.isArray(contents)) {
+      return res.status(400).json({ error: 'contents array is required' });
+    }
+
+    const project = process.env.GCP_PROJECT_ID || 'rhwb-pulse';
+    const region = process.env.GCP_REGION || 'us-east1';
+    const model = req.body.model || process.env.VERTEX_AI_MODEL || 'gemini-2.0-flash-001';
+
+    const vertexUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${project}/locations/${region}/publishers/google/models/${model}:generateContent`;
+
+    const client = await auth.getClient();
+    const accessToken = await client.getAccessToken();
+
+    const vertexBody = { contents, generationConfig };
+    if (systemInstruction) vertexBody.systemInstruction = systemInstruction;
+    if (tools) vertexBody.tools = tools;
+
+    const vertexRes = await fetch(vertexUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(vertexBody),
+    });
+
+    if (!vertexRes.ok) {
+      const errText = await vertexRes.text();
+      console.error('Vertex AI error:', vertexRes.status, errText);
+      return res.status(502).json({ error: 'AI service error' });
+    }
+
+    const result = await vertexRes.json();
+    res.json(result);
+  } catch (err) {
+    console.error('Error in veer-chat:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

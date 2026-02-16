@@ -151,14 +151,14 @@ function getSuggestionChips(activity: string, hasWeather: boolean): string[] {
 const generateId = () => Math.random().toString(36).substring(2, 15);
 
 // Helper to call the veer-data Edge Function (all Veer data goes through Cloud SQL)
-async function callVeerEdgeFunction(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function callVeerEdgeFunction(payload: Record<string, unknown>, timeoutMs = 8000): Promise<Record<string, unknown>> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
     throw new Error('No active session');
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(
@@ -442,45 +442,23 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
         }
       }
 
-      // Format descriptions via Gemini
-      const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
-      const modelName = process.env.REACT_APP_GEMINI_MODEL || 'gemini-2.0-flash-exp';
+      // Format descriptions via Edge Function → Cloud Run → Vertex AI
+      const allWorkouts = [
+        ...todayWorkouts.map((w: WorkoutRow, i: number) => ({ key: `today-${i}`, desc: w.description })),
+        ...tomorrowWorkouts.map((w: WorkoutRow, i: number) => ({ key: `tomorrow-${i}`, desc: w.description }))
+      ].filter(item => item.desc?.trim());
 
-      if (apiKey) {
-        const allWorkouts = [
-          ...todayWorkouts.map((w: WorkoutRow, i: number) => ({ key: `today-${i}`, desc: w.description })),
-          ...tomorrowWorkouts.map((w: WorkoutRow, i: number) => ({ key: `tomorrow-${i}`, desc: w.description }))
-        ].filter(item => item.desc?.trim());
-
-        if (allWorkouts.length > 0) {
-          try {
-            const prompt = `Format each workout description below into a clean, concise summary (1-2 sentences max). Remove URLs. Return ONLY valid JSON object mapping keys to formatted strings, nothing else.\n\n${JSON.stringify(
-              Object.fromEntries(allWorkouts.map(w => [w.key, w.desc]))
-            )}`;
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            const res = await fetch(apiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: 'Return only valid JSON. No markdown, no explanation.' }] },
-                generationConfig: { maxOutputTokens: 2000, temperature: 0.2 }
-              })
-            });
-            if (res.ok) {
-              const result = await res.json();
-              const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-              const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-              try {
-                const parsed = JSON.parse(cleaned);
-                setFormattedDescriptions(parsed);
-              } catch (parseErr) {
-                console.warn('[VEER] Could not parse formatted descriptions:', parseErr);
-              }
-            }
-          } catch (e) {
-            console.error('[VEER] Failed to format descriptions:', e);
+      if (allWorkouts.length > 0) {
+        try {
+          const fmtResult = await callVeerEdgeFunction({
+            action: 'format-descriptions',
+            descriptions: Object.fromEntries(allWorkouts.map(w => [w.key, w.desc])),
+          });
+          if (fmtResult.data && typeof fmtResult.data === 'object') {
+            setFormattedDescriptions(fmtResult.data as Record<string, string>);
           }
+        } catch (e) {
+          console.error('[VEER] Failed to format descriptions:', e);
         }
       }
     };
@@ -499,137 +477,7 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
     return null;
   };
 
-  // Build user context string from workout/profile data
-  const buildUserContext = useCallback((): string => {
-    if (!userProfileData) return '';
-
-    const lines: string[] = ['--- CURRENT USER CONTEXT ---'];
-
-    // Keys to skip: workout-specific fields (handled separately) + PII fields (never send to LLM)
-    const skipKeys = new Set([
-      'id', 'created_at', 'updated_at', 'workout_name', 'description',
-      'planned_distance', 'workout_date',
-      // PII fields - never send to LLM
-      'email_id', 'first_name', 'last_name', 'runner_name',
-      'zip', 'gender', 'coach_email', 'phone_no', 'address',
-      'city', 'state', 'country', 'dob', 'runner_id',
-      'profile_picture', 'referred_by', 'referred_by_email_id',
-    ]);
-
-    // Friendly label mapping for non-PII keys sent to LLM
-    const labelMap: Record<string, string> = {
-      fitness_level: 'Fitness Level',
-      goals: 'Current Goal',
-      subscription_tier: 'Subscription Tier',
-      season: 'Season',
-      meso: 'Meso',
-      week_number: 'Week',
-      activity: 'Activity Type',
-      group_name: 'Group',
-      program: 'Program',
-      level: 'Level',
-      pace_zone: 'Pace Zone',
-      target_pace: 'Target Pace',
-      race_distance: 'Race Distance',
-      program_type: 'Program Type',
-    };
-
-    // Dynamically include all non-empty fields from the user profile row
-    for (const [key, value] of Object.entries(userProfileData)) {
-      if (skipKeys.has(key)) continue;
-      if (value === null || value === undefined || value === '') continue;
-      const label = labelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      lines.push(`${label}: ${value}`);
-    }
-
-    // Today's workouts
-    if (workoutData?.today && workoutData.today.length > 0) {
-      lines.push('');
-      lines.push("Today's Workouts:");
-      workoutData.today.forEach((w, i) => {
-        lines.push(`  ${i + 1}. ${w.workout_name} (${w.activity})`);
-        if (w.planned_distance) lines.push(`     Distance: ${w.planned_distance} mi`);
-        if (w.description) lines.push(`     Details: ${stripYouTubeUrls(w.description).substring(0, 200)}`);
-      });
-    }
-
-    // Tomorrow's workouts
-    if (workoutData?.tomorrow && workoutData.tomorrow.length > 0) {
-      lines.push('');
-      lines.push("Tomorrow's Workouts:");
-      workoutData.tomorrow.forEach((w, i) => {
-        lines.push(`  ${i + 1}. ${w.workout_name} (${w.activity})`);
-        if (w.planned_distance) lines.push(`     Distance: ${w.planned_distance} mi`);
-        if (w.description) lines.push(`     Details: ${stripYouTubeUrls(w.description).substring(0, 200)}`);
-      });
-    }
-
-    // Weather
-    if (weatherData.today) {
-      lines.push('');
-      lines.push(`Today's Weather: ${weatherData.today.temp}°F, ${weatherData.today.conditions}, wind ${weatherData.today.wind} mph`);
-    }
-    if (weatherData.tomorrow) {
-      lines.push(`Tomorrow's Forecast: ${weatherData.tomorrow.temp}°F, ${weatherData.tomorrow.conditions}, wind ${weatherData.tomorrow.wind} mph`);
-    }
-
-    lines.push('----------------------------');
-
-    return '\n\n' + lines.join('\n');
-  }, [userProfileData, workoutData, weatherData]);
-
-  // Build system instruction - wrapped in useCallback for stable reference
-  const buildSystemInstruction = useCallback((): string => {
-    const userContext = buildUserContext();
-
-    if (!useRhwbSources) {
-      return 'You are Veer, a helpful running assistant. Answer questions about running, training, nutrition, and fitness using your general knowledge.' + userContext;
-    }
-
-    return `You are Veer, a helpful running assistant for RHWB (Run Happy With Bhumika).
-
-CRITICAL RULE: When a coach profile has an [Image Source] field containing a URL, you MUST include it as the FIRST line of your response using this exact markdown syntax:
-![Coach Name](the_exact_image_url)
-
-The source documents use three formats:
-
-1) Coach profiles have fields: [Role], [Coach Name], [Profile Description], [Image Source], [Profile URL]
-2) YouTube transcripts have fields: Video Title, Video URL, Video ID, Description, TRANSCRIPT START/END
-3) Blog posts have fields: Title, Description, URL, Image URL (optional), Blog Text Start/End
-
-Rules for each source type:
-
-PERSON QUERIES:
-When the user asks about a specific person:
-1. FIRST, find and present their coach profile (image, description, profile link) as described below
-2. THEN, search for that person's name across ALL other sources (blog posts, YouTube videos) and include any additional content where they are mentioned or featured
-3. Present the additional content after the profile summary, grouped by type
-
-COACH PROFILES:
-- ALWAYS include the image first: ![Coach Name](image_url) using the exact [Image Source] URL
-- If [Image Source] is empty, skip the image
-- Summarize [Profile Description] in 2-3 sentences
-- Link to profile: [View Profile](profile_url)
-
-YOUTUBE VIDEOS:
-- Include the video link on its own line: [Video Title](video_url)
-- Summarize the key points, do NOT quote the raw transcript
-
-BLOG POSTS:
-- If the blog post has an [Image URL] field, include the image FIRST: ![Title](image_url)
-- If [Image URL] is empty or missing, skip the image
-- Summarize the key points, do NOT quote the full blog text
-- Include a link: [Read More](blog_url)
-
-URLS:
-- Any URL found in the source documents (blog URLs, video URLs, profile URLs, or any other link) MUST be included as a clickable markdown link in the response
-- Use the format [descriptive text](url) so the user can click through to the original content
-- Never omit a URL that appears in a source document you are referencing
-
-Format all responses with clear markdown.` + userContext;
-  }, [useRhwbSources, buildUserContext]);
-
-  // Send message - wrapped in useCallback for stable reference
+  // Send message via Edge Function → Cloud Run → Vertex AI (HIPAA-compliant)
   const sendMessage = useCallback(async (messageText: string) => {
     if (!messageText.trim() || isLoading) return;
 
@@ -645,61 +493,26 @@ Format all responses with clear markdown.` + userContext;
     setIsLoading(true);
 
     try {
-      const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
-      const modelName = process.env.REACT_APP_GEMINI_MODEL || 'gemini-2.0-flash-exp';
-      const fileSearchStoreName = process.env.REACT_APP_FILE_SEARCH_STORE_NAME;
-
-      if (!apiKey) throw new Error('Gemini API key not configured');
-
-      // Build conversation history
+      // Build conversation history (skip greeting message)
       const conversationHistory = messages
         .filter((msg, index) => !(index === 0 && msg.role === 'assistant'))
         .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
         .join('\n');
 
-      const fullPrompt = conversationHistory
-        ? `${conversationHistory}\n\nUser: ${messageText}\n\nAssistant:`
-        : messageText;
-
-      // Build system instruction with priority instructions
-      let systemInstruction = buildSystemInstruction();
       const priorityInstruction = getPriorityInstruction(messageText);
-      if (priorityInstruction && useRhwbSources) {
-        systemInstruction += `\n\nPriority instruction for this query: ${priorityInstruction}`;
-      }
 
-      const requestBody: any = {
-        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
-      };
+      const result = await callVeerEdgeFunction({
+        action: 'chat',
+        message: messageText,
+        conversationHistory: conversationHistory || null,
+        useRhwbSources,
+        priorityInstruction: priorityInstruction && useRhwbSources ? priorityInstruction : null,
+        weatherData,
+      }, 30000); // 30s timeout for AI responses
 
-      // Add file search tool if enabled
-      if (fileSearchStoreName && useRhwbSources) {
-        const storeName = fileSearchStoreName.startsWith('fileSearchStores/')
-          ? fileSearchStoreName
-          : `fileSearchStores/${fileSearchStoreName}`;
-        requestBody.tools = [{ file_search: { file_search_store_names: [storeName] } }];
-      }
-
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('[VEER] API Error:', errorData);
-        throw new Error(`API request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const responseText = (result.data as any)?.response;
       if (!responseText) {
-        console.error('[VEER] Empty or blocked response:', JSON.stringify(data));
-        throw new Error('No response from Gemini');
+        throw new Error('No response from AI');
       }
 
       setMessages(prev => [...prev, {
@@ -720,7 +533,7 @@ Format all responses with clear markdown.` + userContext;
       setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [messages, isLoading, useRhwbSources, buildSystemInstruction]);
+  }, [messages, isLoading, useRhwbSources, weatherData]);
 
   const handleSendMessage = () => sendMessage(input);
 
