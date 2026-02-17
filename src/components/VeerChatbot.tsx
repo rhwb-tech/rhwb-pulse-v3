@@ -20,7 +20,6 @@ import {
   Alert,
   Snackbar,
   Collapse,
-  Divider,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
@@ -28,7 +27,6 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DownloadIcon from '@mui/icons-material/Download';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CheckIcon from '@mui/icons-material/Check';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
@@ -365,7 +363,6 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
       if (data.length === 0) return;
 
       const name = data[0].first_name || user.email!.split('@')[0];
-      const zip = data[0].zip || '';
       setUserProfileData(data[0]);
       const todayStr = fmt(today);
       const tomorrowStr = fmt(tomorrow);
@@ -385,58 +382,21 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
         timestamp: new Date()
       }]);
 
-      // Fetch weather for outdoor activities
+      // Fetch weather server-side (zip never leaves backend)
       const todayHasOutdoor = todayWorkouts.some((w: WorkoutRow) => isOutdoorActivity(w.activity));
       const tomorrowHasOutdoor = tomorrowWorkouts.some((w: WorkoutRow) => isOutdoorActivity(w.activity));
-      const weatherKey = process.env.REACT_APP_OPENWEATHERMAP_API_KEY;
 
-      if (zip && weatherKey && (todayHasOutdoor || tomorrowHasOutdoor)) {
+      if (todayHasOutdoor || tomorrowHasOutdoor) {
         try {
-          let todayWeather: WeatherInfo | null = null;
-          if (todayHasOutdoor) {
-            const todayRes = await fetch(
-              `https://api.openweathermap.org/data/2.5/weather?zip=${zip},us&appid=${weatherKey}&units=imperial`
-            );
-            if (todayRes.ok) {
-              const w = await todayRes.json();
-              todayWeather = {
-                temp: Math.round(w.main?.temp || 0),
-                conditions: w.weather?.[0]?.description || 'unknown',
-                wind: Math.round(w.wind?.speed || 0),
-                icon: w.weather?.[0]?.icon || ''
-              };
-            }
+          const weatherResult = await callVeerEdgeFunction({
+            action: 'get-weather',
+            todayOutdoor: todayHasOutdoor,
+            tomorrowOutdoor: tomorrowHasOutdoor,
+          });
+          const wd = weatherResult.data as { today: WeatherInfo | null; tomorrow: WeatherInfo | null } | undefined;
+          if (wd) {
+            setWeatherData({ today: wd.today, tomorrow: wd.tomorrow });
           }
-
-          let tomorrowWeather: WeatherInfo | null = null;
-          if (tomorrowHasOutdoor) {
-            const forecastRes = await fetch(
-              `https://api.openweathermap.org/data/2.5/forecast?zip=${zip},us&appid=${weatherKey}&units=imperial`
-            );
-            if (forecastRes.ok) {
-              const forecast = await forecastRes.json();
-              const tomorrowDateStr = fmt(tomorrow);
-
-              const tomorrowForecasts = forecast.list?.filter((f: { dt_txt: string }) =>
-                f.dt_txt.startsWith(tomorrowDateStr)
-              ) || [];
-
-              const noonForecast = tomorrowForecasts.find((f: { dt_txt: string }) =>
-                f.dt_txt.includes('12:00')
-              ) || tomorrowForecasts[Math.floor(tomorrowForecasts.length / 2)] || tomorrowForecasts[0];
-
-              if (noonForecast) {
-                tomorrowWeather = {
-                  temp: Math.round(noonForecast.main?.temp || 0),
-                  conditions: noonForecast.weather?.[0]?.description || 'unknown',
-                  wind: Math.round(noonForecast.wind?.speed || 0),
-                  icon: noonForecast.weather?.[0]?.icon || ''
-                };
-              }
-            }
-          }
-
-          setWeatherData({ today: todayWeather, tomorrow: tomorrowWeather });
         } catch (e) {
           console.error('[VEER] Failed to fetch weather:', e);
         }
@@ -618,45 +578,6 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
 
   const toggleVideo = (key: string) => {
     setExpandedVideo(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  // Export chat
-  const exportChat = (format: 'txt' | 'md' | 'json') => {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    let content: string;
-    let filename: string;
-
-    switch (format) {
-      case 'json':
-        content = JSON.stringify(messages, null, 2);
-        filename = `veer-chat-${timestamp}.json`;
-        break;
-      case 'md':
-        content = messages.map(m => {
-          const time = m.timestamp.toLocaleString();
-          const role = m.role === 'user' ? '**You**' : '**Veer**';
-          return `### ${role} (${time})\n\n${m.content}\n`;
-        }).join('\n---\n\n');
-        filename = `veer-chat-${timestamp}.md`;
-        break;
-      default:
-        content = messages.map(m => {
-          const time = m.timestamp.toLocaleString();
-          const role = m.role === 'user' ? 'You' : 'Veer';
-          return `[${time}] ${role}:\n${m.content}\n`;
-        }).join('\n---\n\n');
-        filename = `veer-chat-${timestamp}.txt`;
-    }
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMenuAnchor(null);
-    showSnackbar(`Chat exported as ${format.toUpperCase()}`);
   };
 
   const copyChat = async () => {
@@ -952,19 +873,6 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
 
       {/* Menu */}
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-        <MenuItem onClick={() => exportChat('txt')}>
-          <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Export as Text</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => exportChat('md')}>
-          <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Export as Markdown</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => exportChat('json')}>
-          <ListItemIcon><DownloadIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Export as JSON</ListItemText>
-        </MenuItem>
-        <Divider />
         <MenuItem onClick={copyChat}>
           <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon>
           <ListItemText>Copy Chat</ListItemText>

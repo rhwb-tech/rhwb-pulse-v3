@@ -56,10 +56,10 @@ serve(async (req) => {
     // 3. Service client for privileged queries (bypasses RLS)
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // 4. Map email → runner_id (needed for feedback actions that go to Cloud SQL)
+    // 4. Map email → runner_id + zip (needed for feedback and weather)
     const { data: profile, error: profileError } = await supabase
       .from('runners_profile')
-      .select('runner_id')
+      .select('runner_id, zip')
       .eq('email_id', userEmail)
       .single()
 
@@ -168,6 +168,72 @@ serve(async (req) => {
       }
 
       return jsonResponse({ success: true })
+    }
+
+    if (action === 'get-weather') {
+      const { todayOutdoor, tomorrowOutdoor } = body
+      const zip = profile.zip
+      const weatherKey = Deno.env.get('OPENWEATHERMAP_API_KEY')
+
+      if (!zip || !weatherKey) {
+        return jsonResponse({ data: { today: null, tomorrow: null } })
+      }
+
+      let today = null
+      let tomorrow = null
+
+      if (todayOutdoor) {
+        try {
+          const res = await fetch(
+            `https://api.openweathermap.org/data/2.5/weather?zip=${zip},us&appid=${weatherKey}&units=imperial`
+          )
+          if (res.ok) {
+            const w = await res.json()
+            today = {
+              temp: Math.round(w.main?.temp || 0),
+              conditions: w.weather?.[0]?.description || 'unknown',
+              wind: Math.round(w.wind?.speed || 0),
+              icon: w.weather?.[0]?.icon || '',
+            }
+          }
+        } catch (e) {
+          console.error('Weather (today) error:', e)
+        }
+      }
+
+      if (tomorrowOutdoor) {
+        try {
+          const res = await fetch(
+            `https://api.openweathermap.org/data/2.5/forecast?zip=${zip},us&appid=${weatherKey}&units=imperial`
+          )
+          if (res.ok) {
+            const forecast = await res.json()
+            const d = new Date()
+            d.setDate(d.getDate() + 1)
+            const tomorrowStr = d.toISOString().split('T')[0]
+
+            const tomorrowForecasts = forecast.list?.filter((f: any) =>
+              f.dt_txt.startsWith(tomorrowStr)
+            ) || []
+            const noon = tomorrowForecasts.find((f: any) =>
+              f.dt_txt.includes('12:00')
+            ) || tomorrowForecasts[Math.floor(tomorrowForecasts.length / 2)] || tomorrowForecasts[0]
+
+            if (noon) {
+              tomorrow = {
+                temp: Math.round(noon.main?.temp || 0),
+                conditions: noon.weather?.[0]?.description || 'unknown',
+                wind: Math.round(noon.wind?.speed || 0),
+                icon: noon.weather?.[0]?.icon || '',
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Weather (tomorrow) error:', e)
+        }
+      }
+
+      return jsonResponse({ data: { today, tomorrow } })
     }
 
     if (action === 'chat') {
@@ -317,17 +383,30 @@ Format all responses with clear markdown.` + userContext
         : message
 
       // Call Cloud Run /veer-chat → Vertex AI (HIPAA-compliant, covered by GCP BAA)
+      const chatBody: Record<string, unknown> = {
+        contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+        systemInstruction: { parts: [{ text: systemText }] },
+        generationConfig: { maxOutputTokens: 2000, temperature: 0.7 },
+      }
+
+      // Vertex AI Search grounding — retrieves RHWB content (blogs, coach profiles, videos)
+      if (useRhwb) {
+        chatBody.tools = [{
+          retrieval: {
+            vertexAiSearch: {
+              datastore: 'projects/495645691990/locations/global/collections/default_collection/dataStores/rhwb-veer_1771275751515_gcs_store',
+            },
+          },
+        }]
+      }
+
       const chatRes = await fetch(`${cloudRunUrl}/veer-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': cloudRunApiKey,
         },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-          systemInstruction: { parts: [{ text: systemText }] },
-          generationConfig: { maxOutputTokens: 2000, temperature: 0.7 },
-        }),
+        body: JSON.stringify(chatBody),
       })
 
       if (!chatRes.ok) {
