@@ -3,6 +3,8 @@ import { Session } from '@supabase/supabase-js';
 import { supabase, supabaseValidation } from '../components/supabaseClient';
 import { UserRole } from '../types/user';
 
+const IS_DEV = process.env.NODE_ENV !== 'production';
+
 interface AuthUser {
   email: string;
   role: UserRole;
@@ -200,7 +202,7 @@ const validateEmailAccess = async (email: string, retryCount = 0, isSessionResto
 
   // Check if there's already a pending validation for this email
   if (validationCache.has(cacheKey)) {
-    console.log(`[AUTH] Using cached validation request for: ${email}`);
+    IS_DEV && console.log(`[AUTH] Using cached validation request for: ${email}`);
     return validationCache.get(cacheKey)!;
   }
 
@@ -290,7 +292,7 @@ const performValidation = async (email: string, retryCount: number, isSessionRes
     // Phase 1: Reduced timeout to 3s (coach-portal pattern)
     // Use slightly longer timeout for session restoration (5s) vs normal queries (3s)
     const queryTimeout = isSessionRestore ? 5000 : 3000;
-    console.log(`[AUTH] Starting validation for: ${email} (attempt ${retryCount + 1}, session restore: ${isSessionRestore}, timeout: ${queryTimeout}ms)`);
+    IS_DEV && console.log(`[AUTH] Starting validation for: ${email} (attempt ${retryCount + 1}, session restore: ${isSessionRestore}, timeout: ${queryTimeout}ms)`);
     const startTime = Date.now();
 
     // Try to get the current session first to trigger any initialization (with short timeout)
@@ -316,19 +318,19 @@ const performValidation = async (email: string, retryCount: number, isSessionRes
       setTimeout(() => reject(new Error('Database query timeout')), queryTimeout);
     });
 
-    console.log(`[AUTH] Executing Supabase query for: ${email}`);
+    IS_DEV && console.log(`[AUTH] Executing Supabase query for: ${email}`);
 
     let data, error;
     try {
       // Execute the query with explicit promise handling
       const queryExecutor = async () => {
-        console.log(`[AUTH] Query executor started for: ${email}`);
+        IS_DEV && console.log(`[AUTH] Query executor started for: ${email}`);
         const result = await supabaseValidation
           .from('v_pulse_roles')
           .select('email_id, role, full_name')
           .eq('email_id', email.toLowerCase())
           .single();
-        console.log(`[AUTH] Query executor completed for: ${email}`, result);
+        IS_DEV && console.log(`[AUTH] Query executor completed for: ${email}`, result);
         return result;
       };
 
@@ -338,13 +340,13 @@ const performValidation = async (email: string, retryCount: number, isSessionRes
       ]);
 
       const elapsed = Date.now() - startTime;
-      console.log(`[AUTH] Query completed in ${elapsed}ms for: ${email}`);
+      IS_DEV && console.log(`[AUTH] Query completed in ${elapsed}ms for: ${email}`);
       data = result.data;
       error = result.error;
     } catch (timeoutError: any) {
       // Timeout occurred
       const elapsed = Date.now() - startTime;
-      console.error(`[AUTH] Database query timeout after ${elapsed}ms for: ${email}`);
+      IS_DEV && console.error(`[AUTH] Database query timeout after ${elapsed}ms for: ${email}`);
       error = { message: 'timeout', code: 'TIMEOUT' };
     }
 
@@ -368,7 +370,7 @@ const performValidation = async (email: string, retryCount: number, isSessionRes
 
       if (error.message?.includes('timeout') || error.code === 'TIMEOUT') {
         // Phase 2: No retry logic - use email-based fallback instead (coach-portal pattern)
-        console.log(`[AUTH] Query timeout, using email-based fallback for: ${email}`);
+        IS_DEV && console.log(`[AUTH] Query timeout, using email-based fallback for: ${email}`);
 
         // Determine role from email pattern as fallback
         const fallbackRole = determineRoleFromEmail(email);
@@ -503,7 +505,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return;
           }
 
-          console.log('[AUTH INIT] Validating session user (session restore):', session.user.email);
+          IS_DEV && console.log('[AUTH INIT] Validating session user (session restore):', session.user.email);
 
           // ALWAYS validate authenticated user first (URL override will be handled by separate useEffect)
           // Pass isSessionRestore=true to use longer cache and timeout
@@ -598,7 +600,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setSession(session);
 
           if (session?.user) {
-            console.log(`[AUTH STATE CHANGE] Validating user: ${session.user.email}`);
+            IS_DEV && console.log(`[AUTH STATE CHANGE] Validating user: ${session.user.email}`);
 
             // ALWAYS validate authenticated user first (URL override handled by separate useEffect)
             const isSessionRestore = event === 'SIGNED_IN' && !user;
@@ -614,7 +616,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               setUser(authUser);
               setIsLoading(false);
 
-              console.log(`[AUTH STATE CHANGE] User set successfully: ${authUser.email} (${authUser.role})`);
+              IS_DEV && console.log(`[AUTH STATE CHANGE] User set successfully: ${authUser.email} (${authUser.role})`);
 
               await logAuthEvent({
                 email_id: session.user.email!,
@@ -664,7 +666,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (email: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      console.log('[LOGIN] Starting login for:', email);
+      IS_DEV && console.log('[LOGIN] Starting login for:', email);
 
       setIsLoading(true);
 
