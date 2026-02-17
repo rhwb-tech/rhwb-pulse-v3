@@ -195,7 +195,7 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [useRhwbSources, setUseRhwbSources] = useState(true);
   const [showDisclaimer, setShowDisclaimer] = useState(() => {
-    return !localStorage.getItem(`veer_disclaimer_seen_${user?.email}`);
+    return !localStorage.getItem(`veer_disclaimer_seen_${user?.id}`);
   });
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -901,7 +901,7 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
             size="small"
             onClick={() => {
               setShowDisclaimer(false);
-              localStorage.setItem(`veer_disclaimer_seen_${user?.email}`, 'true');
+              localStorage.setItem(`veer_disclaimer_seen_${user?.id}`, 'true');
             }}
             sx={{ ml: 1, color: '#e65100' }}
           >

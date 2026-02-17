@@ -25,9 +25,9 @@ const DashboardContainer: React.FC = () => {
   // Keep the actual user role even in override mode so admin filters remain visible
   const userRole = user?.role;
 
-  // Debug logging for admin users
+  // Debug logging for admin users (dev only — emails are PII)
   React.useEffect(() => {
-    if (user) {
+    if (process.env.NODE_ENV !== 'production' && user) {
       console.log('[DASHBOARD CONTAINER] User:', { email: user.email, role: user.role });
       console.log('[DASHBOARD CONTAINER] userRole will be:', userRole);
       console.log('[DASHBOARD CONTAINER] effectiveEmail:', effectiveEmail);
@@ -35,8 +35,6 @@ const DashboardContainer: React.FC = () => {
       if (isOverrideActive) {
         console.log('[DASHBOARD CONTAINER] Override mode - viewing as:', overrideEmail);
       }
-    } else {
-      console.log('[DASHBOARD CONTAINER] User is null - userRole will be undefined');
     }
   }, [user, effectiveEmail, isOverrideActive, overrideEmail, userRole]);
 

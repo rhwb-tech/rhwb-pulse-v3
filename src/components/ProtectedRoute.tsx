@@ -88,7 +88,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         return;
       }
 
-      console.log('[PROTECTED ROUTE] Email override requested:', normalizedOverrideEmail);
+      process.env.NODE_ENV !== 'production' && console.log('[PROTECTED ROUTE] Email override requested:', normalizedOverrideEmail);
       console.log('[PROTECTED ROUTE] Authenticated user role:', user.role);
 
       // Check if user has admin role
