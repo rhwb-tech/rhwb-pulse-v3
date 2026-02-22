@@ -362,7 +362,6 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
       if (data.length === 0) return;
 
       const name = data[0].first_name || user.email!.split('@')[0];
-      setUserProfileData(data[0]);
       const todayStr = fmt(today);
       const tomorrowStr = fmt(tomorrow);
       const todayWorkouts = data.filter((w: WorkoutRow) => w.workout_date === todayStr);
