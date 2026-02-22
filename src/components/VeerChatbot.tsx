@@ -215,7 +215,6 @@ const VeerChatbot: React.FC<VeerChatbotProps> = ({ fullPage = false }) => {
     tomorrow: WeatherInfo | null;
   }>({ today: null, tomorrow: null });
   const [greetingMessageId, setGreetingMessageId] = useState<string>('');
-  const [userProfileData, setUserProfileData] = useState<WorkoutRow | null>(null);
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string>('');
 
