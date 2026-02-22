@@ -49,8 +49,11 @@ serve(async (req) => {
       )
     }
 
+    console.log('[QUAL] Step 1 - JWT valid, userEmail:', userEmail)
+
     // 2. Parse request body
     const { season, runnerEmail } = await req.json()
+    console.log('[QUAL] Step 2 - Request body:', { season, runnerEmail })
     if (!season) {
       return new Response(
         JSON.stringify({ error: 'season is required' }),
@@ -69,6 +72,7 @@ serve(async (req) => {
       .single()
 
     let role = roleData?.role || 'runner'
+    console.log('[QUAL] Step 4 - Role resolved:', role, 'roleData:', JSON.stringify(roleData))
 
     // Fallback: email pattern matching
     if (!roleData) {
@@ -155,7 +159,10 @@ serve(async (req) => {
       }
     }
 
+    console.log('[QUAL] Step 5 - authorizedEmails:', JSON.stringify(authorizedEmails))
+
     if (authorizedEmails.length === 0) {
+      console.log('[QUAL] EARLY EXIT - no authorized emails')
       return new Response(
         JSON.stringify({ data: [] }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -168,11 +175,16 @@ serve(async (req) => {
       .select('email_id, runner_id')
       .in('email_id', authorizedEmails)
 
+    console.log('[QUAL] Step 6 - profiles from runners_profile:', JSON.stringify(profiles))
+
     const runnerIds = (profiles || [])
       .filter((p: { runner_id: string | null }) => p.runner_id)
       .map((p: { runner_id: string }) => p.runner_id)
 
+    console.log('[QUAL] Step 6 - runnerIds:', JSON.stringify(runnerIds))
+
     if (runnerIds.length === 0) {
+      console.log('[QUAL] EARLY EXIT - no runner_ids found')
       return new Response(
         JSON.stringify({ data: [] }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -201,6 +213,7 @@ serve(async (req) => {
     }
 
     const result = await cloudRunResponse.json()
+    console.log('[QUAL] Step 7 - Cloud Run returned', (result.data || []).length, 'rows')
 
     return new Response(
       JSON.stringify({ data: result.data || [] }),
