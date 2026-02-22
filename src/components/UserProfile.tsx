@@ -123,9 +123,11 @@ const UserProfile: React.FC = () => {
     try {
       setLoading(true);
       const userRole = user?.role;
-      console.log('[PROFILE] Starting profile fetch for:', targetEmail, 'role:', userRole);
-      if (isOverrideActive) {
-        console.log('[PROFILE] Override mode active - fetching profile for:', overrideEmail);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[PROFILE] Starting profile fetch for:', targetEmail, 'role:', userRole);
+        if (isOverrideActive) {
+          console.log('[PROFILE] Override mode active - fetching profile for:', overrideEmail);
+        }
       }
 
       // Add timeout protection (10 seconds)
@@ -422,7 +424,7 @@ const UserProfile: React.FC = () => {
         tableName = 'runners_profile';
       }
 
-      console.log(`[PROFILE] Updating profile_picture in ${tableName} for:`, user.email.toLowerCase());
+      process.env.NODE_ENV !== 'production' && console.log(`[PROFILE] Updating profile_picture in ${tableName} for:`, user.email.toLowerCase());
       const { error: updateError } = await supabase
         .from(tableName)
         .update({ profile_picture: publicUrl })

@@ -10,7 +10,7 @@ import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
 import { supabase } from './supabaseClient';
 import { useNavigate, useLocation } from 'react-router-dom';
-// import VeerChatbot from './VeerChatbot';
+import VeerChatbot from './VeerChatbot';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -88,7 +88,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         return;
       }
 
-      console.log('[PROTECTED ROUTE] Email override requested:', normalizedOverrideEmail);
+      process.env.NODE_ENV !== 'production' && console.log('[PROTECTED ROUTE] Email override requested:', normalizedOverrideEmail);
       console.log('[PROTECTED ROUTE] Authenticated user role:', user.role);
 
       // Check if user has admin role
@@ -798,8 +798,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </Alert>
       </Snackbar>
 
-      {/* Veer AI Chatbot - temporarily hidden for production rollout */}
-      {/* {location.pathname !== '/veer' && <VeerChatbot />} */}
+      {location.pathname !== '/veer' && <VeerChatbot />}
     </Box>
   );
 };

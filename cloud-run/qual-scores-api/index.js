@@ -1,5 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
+const { GoogleAuth } = require('google-auth-library');
 
 const app = express();
 app.use(express.json());
@@ -178,6 +179,76 @@ app.post('/upsert-qual-score', validateApiKey, async (req, res) => {
   }
 });
 
+// Upsert Veer feedback
+app.post('/upsert-veer-feedback', validateApiKey, async (req, res) => {
+  try {
+    const { message_id, runner_id, feedback, user_question, assistant_response } = req.body;
+
+    if (!message_id || !runner_id || !feedback) {
+      return res.status(400).json({ error: 'message_id, runner_id, and feedback are required' });
+    }
+
+    await pool.query(
+      `INSERT INTO veer_feedback (message_id, runner_id, feedback, user_question, assistant_response)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (message_id, runner_id)
+       DO UPDATE SET feedback = $3, user_question = $4, assistant_response = $5, updated_at = NOW()`,
+      [message_id, runner_id, feedback, user_question || null, assistant_response || null]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error upserting veer feedback:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete Veer feedback
+app.post('/delete-veer-feedback', validateApiKey, async (req, res) => {
+  try {
+    const { message_id, runner_id } = req.body;
+
+    if (!message_id || !runner_id) {
+      return res.status(400).json({ error: 'message_id and runner_id are required' });
+    }
+
+    await pool.query(
+      `DELETE FROM veer_feedback WHERE message_id = $1 AND runner_id = $2`,
+      [message_id, runner_id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting veer feedback:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update Veer feedback comment
+app.post('/update-veer-feedback-comment', validateApiKey, async (req, res) => {
+  try {
+    const { message_id, runner_id, comment } = req.body;
+
+    if (!message_id || !runner_id || !comment) {
+      return res.status(400).json({ error: 'message_id, runner_id, and comment are required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE veer_feedback SET comment = $3, updated_at = NOW()
+       WHERE message_id = $1 AND runner_id = $2`,
+      [message_id, runner_id, comment]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Feedback record not found' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating veer feedback comment:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 // Get activity comment categories for given runner_ids, season, and optional meso
 app.post('/get-activity-comment-categories', validateApiKey, async (req, res) => {
   try {
@@ -292,6 +363,52 @@ app.post('/get-uncategorized-comments', validateApiKey, async (req, res) => {
   }
 });
 
+// Vertex AI chat proxy (HIPAA-compliant — covered by GCP BAA)
+const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
+
+app.post('/veer-chat', validateApiKey, async (req, res) => {
+  try {
+    const { contents, systemInstruction, generationConfig, tools } = req.body;
+
+    if (!contents || !Array.isArray(contents)) {
+      return res.status(400).json({ error: 'contents array is required' });
+    }
+
+    const project = process.env.GCP_PROJECT_ID || 'rhwb-pulse';
+    const region = process.env.GCP_REGION || 'us-east1';
+    const model = req.body.model || process.env.VERTEX_AI_MODEL || 'gemini-2.0-flash-001';
+
+    const vertexUrl = `https://${region}-aiplatform.googleapis.com/v1/projects/${project}/locations/${region}/publishers/google/models/${model}:generateContent`;
+
+    const client = await auth.getClient();
+    const accessToken = await client.getAccessToken();
+
+    const vertexBody = { contents, generationConfig };
+    if (systemInstruction) vertexBody.systemInstruction = systemInstruction;
+    if (tools) vertexBody.tools = tools;
+
+    const vertexRes = await fetch(vertexUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(vertexBody),
+    });
+
+    if (!vertexRes.ok) {
+      const errText = await vertexRes.text();
+      console.error('Vertex AI error:', vertexRes.status, errText);
+      return res.status(502).json({ error: 'AI service error' });
+    }
+
+    const result = await vertexRes.json();
+    res.json(result);
+  } catch (err) {
+    console.error('Error in veer-chat:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`qual-scores-api listening on port ${PORT}`);
