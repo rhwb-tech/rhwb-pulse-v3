@@ -249,28 +249,26 @@ app.post('/update-veer-feedback-comment', validateApiKey, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// Get activity comment categories for given runner_ids, season, and optional meso
+// Get activity comment categories for a coach, season, and optional meso
 app.post('/get-activity-comment-categories', validateApiKey, async (req, res) => {
   try {
-    const { runner_ids, season_no, meso } = req.body;
+    const { coach_email, season_no, meso } = req.body;
 
-    if (!runner_ids || !Array.isArray(runner_ids) || runner_ids.length === 0) {
-      return res.status(400).json({ error: 'runner_ids array is required' });
+    if (!coach_email || typeof coach_email !== 'string') {
+      return res.status(400).json({ error: 'coach_email is required' });
     }
     if (season_no === undefined || season_no === null) {
       return res.status(400).json({ error: 'season_no is required' });
     }
 
-    const limitedIds = runner_ids.slice(0, 500);
-    const params = [limitedIds, season_no];
-    const mesoFilter = meso ? 'AND meso = $3' : '';
-    if (meso) params.push(meso);
+    const params = [coach_email.toLowerCase()];
+    const mesoFilter = meso ? `AND meso = $${params.push(meso)}` : '';
 
     const result = await pool.query(
       `SELECT category, COUNT(*)::int AS count,
               ARRAY_AGG(comment_text ORDER BY comment_text) AS comments
-       FROM activities_comments
-       WHERE runner_id = ANY($1::uuid[]) AND season_no = $2
+       FROM v_comment_categories
+       WHERE coach_email = $1
          AND category IS NOT NULL ${mesoFilter}
        GROUP BY category
        ORDER BY count DESC`,
