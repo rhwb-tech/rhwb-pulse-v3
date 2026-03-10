@@ -129,30 +129,39 @@ export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFro
       try {
         console.log('[FILTER STATE] Fetching seasons from database...');
 
+        // Fetch the current season from rhwb_seasons
+        const { data: currentSeasonData } = await supabase
+          .from('rhwb_seasons')
+          .select('season')
+          .eq('current', true)
+          .single();
+
+        const currentSeasonStr = currentSeasonData?.season || 'Season 15';
+        const currentMatch = currentSeasonStr.match(/Season\s+(\d+)/i);
+        const currentSeasonNum = currentMatch ? currentMatch[1] : '15';
+        console.log('[FILTER STATE] Current season from rhwb_seasons:', currentSeasonNum);
+
         // Query distinct seasons using RPC function
-        // This is more efficient than sampling from multiple offsets
         const { data, error } = await supabase.rpc('get_distinct_seasons');
         const seasonData = data as { season: string }[] | null;
-        
+
         if (error) {
           console.error('[FILTER STATE] Error fetching seasons:', error);
           const fallbackSeasons = [
-            { value: '14', label: 'Season 14' },
-            { value: '13', label: 'Season 13' }
+            { value: currentSeasonNum, label: currentSeasonStr },
           ];
           setSeasonOptions(fallbackSeasons);
-          setSeason('14');
+          setSeason(currentSeasonNum);
           return;
         }
 
         if (!seasonData || seasonData.length === 0) {
           console.warn('[FILTER STATE] No seasons found in database');
           const fallbackSeasons = [
-            { value: '14', label: 'Season 14' },
-            { value: '13', label: 'Season 13' }
+            { value: currentSeasonNum, label: currentSeasonStr },
           ];
           setSeasonOptions(fallbackSeasons);
-          setSeason('14');
+          setSeason(currentSeasonNum);
           return;
         }
 
@@ -174,22 +183,20 @@ export const useFilterState = (userRole: UserRole | undefined, selectedRunnerFro
 
         setSeasonOptions(seasonOpts);
 
-        // Set default to most recent season (first in the sorted list)
-        if (seasonOpts.length > 0) {
-          console.log('[FILTER STATE] Setting default season to:', seasonOpts[0].value);
+        // Default to the current season from rhwb_seasons
+        const matchingOpt = seasonOpts.find(o => o.value === currentSeasonNum);
+        if (matchingOpt) {
+          console.log('[FILTER STATE] Setting default season to current:', currentSeasonNum);
+          setSeason(currentSeasonNum);
+        } else if (seasonOpts.length > 0) {
+          console.log('[FILTER STATE] Current season not in list, using most recent:', seasonOpts[0].value);
           setSeason(seasonOpts[0].value);
         }
 
         seasonFetchedRef.current = true;
       } catch (err) {
         console.error('[FILTER STATE] Exception fetching seasons:', err);
-        // Fallback to hardcoded seasons
-        const fallbackSeasons = [
-          { value: '14', label: 'Season 14' },
-          { value: '13', label: 'Season 13' }
-        ];
-        setSeasonOptions(fallbackSeasons);
-        setSeason('14');
+        setSeason('15');
       }
     };
 

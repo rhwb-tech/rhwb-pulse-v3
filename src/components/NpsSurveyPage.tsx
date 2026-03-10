@@ -18,6 +18,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useNpsSurvey } from '../hooks/useNpsSurvey';
+import { supabase } from './supabaseClient';
 import { NpsSurveyResponses } from '../types/survey';
 
 const LITE_REASONS = [
@@ -163,18 +164,32 @@ function RatingSelector({
   );
 }
 
-const SEASON = '15';
-
 const NpsSurveyPage: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isMobile = useMediaQuery('(max-width:600px)');
   const [showIntro, setShowIntro] = React.useState(true);
+  const [currentSeason, setCurrentSeason] = React.useState('');
+
+  // Fetch current season from rhwb_seasons
+  React.useEffect(() => {
+    const fetchCurrentSeason = async () => {
+      const { data } = await supabase
+        .from('rhwb_seasons')
+        .select('season')
+        .eq('current', true)
+        .single();
+      const seasonStr = data?.season || 'Season 15';
+      const match = seasonStr.match(/Season\s+(\d+)/i);
+      setCurrentSeason(match ? match[1] : '15');
+    };
+    fetchCurrentSeason();
+  }, []);
 
   const email = user?.email || '';
   const userRole = user?.role;
 
-  const survey = useNpsSurvey(email, userRole, SEASON);
+  const survey = useNpsSurvey(email, userRole, currentSeason);
 
   const {
     step,
@@ -346,7 +361,7 @@ const NpsSurveyPage: React.FC = () => {
                     mb: 1,
                   }}
                 >
-                  Season {SEASON} Feedback Survey
+                  Season {currentSeason} Feedback Survey
                 </Typography>
                 <Typography
                   variant="h6"
@@ -400,7 +415,7 @@ const NpsSurveyPage: React.FC = () => {
               {step === 4 && 'Thank You!'}
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              Season {SEASON} Feedback Survey
+              Season {currentSeason} Feedback Survey
             </Typography>
           </Box>
           )}
