@@ -189,7 +189,6 @@ const NpsSurveyPage: React.FC = () => {
     submit,
   } = survey;
 
-  const coachName = metadata?.coach_name ?? null;
   const isLiteRunner = metadata?.is_lite_runner ?? false;
 
   // Total survey steps: non-Lite has 5 (0-4), Lite has 3 (0,2,4 — steps 1,3 skipped)
