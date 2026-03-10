@@ -32,7 +32,10 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
   // Check eligibility on mount
   useEffect(() => {
     if (!email || !season || !userRole) return;
-    if (userRole !== 'runner' && userRole !== 'athlete' && userRole !== 'hybrid') return;
+    if (userRole !== 'runner' && userRole !== 'athlete' && userRole !== 'hybrid') {
+      setCheckComplete(true);
+      return;
+    }
 
     // Check session dismissal
     try {
