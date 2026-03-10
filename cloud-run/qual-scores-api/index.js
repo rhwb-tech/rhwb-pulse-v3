@@ -361,6 +361,64 @@ app.post('/get-uncategorized-comments', validateApiKey, async (req, res) => {
   }
 });
 
+// Submit NPS survey response (HIPAA primary store)
+app.post('/submit-nps-survey', validateApiKey, async (req, res) => {
+  try {
+    const {
+      runner_id, email_id, coach_email, season,
+      feedback_quality, communication, relationship, recommendation, comments,
+      rhwb_effectiveness, rhwb_knowledge_depth, rhwb_recommendation, rhwb_comments,
+      pulse_experience, program, are_you_a_new_or_return_runner_to_rhwb, race_type
+    } = req.body;
+
+    if (!runner_id || !email_id || !season) {
+      return res.status(400).json({ error: 'runner_id, email_id, and season are required' });
+    }
+
+    await pool.query(
+      `INSERT INTO nps_survey_responses (
+        runner_id, email_id, coach_email, season,
+        feedback_quality, communication, relationship, recommendation, comments,
+        rhwb_effectiveness, rhwb_knowledge_depth, rhwb_recommendation, rhwb_comments,
+        pulse_experience, program, are_you_a_new_or_return_runner_to_rhwb, race_type
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ON CONFLICT (runner_id, season) DO NOTHING`,
+      [
+        runner_id, email_id, coach_email, season,
+        feedback_quality, communication, relationship, recommendation, comments,
+        rhwb_effectiveness, rhwb_knowledge_depth, rhwb_recommendation, rhwb_comments,
+        pulse_experience, program, are_you_a_new_or_return_runner_to_rhwb, race_type
+      ]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error submitting NPS survey:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Check if runner already submitted NPS survey for a season
+app.post('/check-nps-survey', validateApiKey, async (req, res) => {
+  try {
+    const { runner_id, season } = req.body;
+
+    if (!runner_id || !season) {
+      return res.status(400).json({ error: 'runner_id and season are required' });
+    }
+
+    const result = await pool.query(
+      `SELECT id FROM nps_survey_responses WHERE runner_id = $1 AND season = $2 LIMIT 1`,
+      [runner_id, season]
+    );
+
+    res.json({ alreadySubmitted: result.rows.length > 0 });
+  } catch (err) {
+    console.error('Error checking NPS survey:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Vertex AI chat proxy (HIPAA-compliant — covered by GCP BAA)
 const auth = new GoogleAuth({ scopes: ['https://www.googleapis.com/auth/cloud-platform'] });
 

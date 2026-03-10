@@ -3,6 +3,7 @@ import { Box, Fab, Drawer, Typography, IconButton, Chip } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
 import UpdateIcon from '@mui/icons-material/Update';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useApp } from '../contexts/AppContext';
 import { useFilterState } from '../hooks/useFilterState';
@@ -10,6 +11,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useMenuHandlers } from '../hooks/useMenuHandlers';
 import FilterChips from '../components/dashboard/FilterChips';
 import DashboardWidgets from '../components/dashboard/DashboardWidgets';
+import { useNpsSurvey } from '../hooks/useNpsSurvey';
 
 const FILTER_PANEL_STORAGE_KEY = 'rhwb_pulse_filter_panel_open';
 
@@ -83,6 +85,16 @@ const DashboardContainer: React.FC = () => {
     dashboardData.searchRunners,
     email
   );
+
+  // NPS Survey — redirect to survey page if eligible
+  const navigate = useNavigate();
+  const npsSurvey = useNpsSurvey(email, userRole, filterState.season);
+
+  useEffect(() => {
+    if (npsSurvey.shouldShowSurvey) {
+      navigate('/season15-survey');
+    }
+  }, [npsSurvey.shouldShowSurvey, navigate]);
 
   // Ref for charts container to focus/scroll to when filter panel closes
   const chartsContainerRef = useRef<HTMLDivElement>(null);
@@ -392,6 +404,7 @@ const DashboardContainer: React.FC = () => {
           />
         </Box>
       </Drawer>
+
     </>
   );
 };
