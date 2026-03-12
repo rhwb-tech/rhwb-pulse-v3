@@ -202,6 +202,7 @@ const NpsSurveyPage: React.FC = () => {
     nextStep,
     prevStep,
     submit,
+    dismiss,
   } = survey;
 
   const isLiteRunner = metadata?.is_lite_runner ?? false;
@@ -377,7 +378,7 @@ const NpsSurveyPage: React.FC = () => {
                 </Typography>
               </Box>
               <Box sx={{ px: 3, pb: 3, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                <Button onClick={goToDashboard} color="inherit" size="small">
+                <Button onClick={() => { dismiss(); goToDashboard(); }} color="inherit" size="small">
                   Maybe Later
                 </Button>
                 <Button
@@ -697,7 +698,7 @@ const NpsSurveyPage: React.FC = () => {
           <Box sx={{ px: 3, pb: 3, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
             {step === 0 && (
               <>
-                <Button onClick={goToDashboard} color="inherit" size="small">
+                <Button onClick={() => { dismiss(); goToDashboard(); }} color="inherit" size="small">
                   Maybe Later
                 </Button>
                 <Button
