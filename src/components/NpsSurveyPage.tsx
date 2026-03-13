@@ -13,6 +13,7 @@ import {
   FormControlLabel,
   FormGroup,
   useMediaQuery,
+  keyframes,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +21,18 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNpsSurvey } from '../hooks/useNpsSurvey';
 import { supabase } from './supabaseClient';
 import { NpsSurveyResponses } from '../types/survey';
+
+const confettiFall = keyframes`
+  0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(80px) rotate(720deg); opacity: 0; }
+`;
+
+const celebrationPulse = keyframes`
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+`;
+
+const CONFETTI_COLORS = ['#667eea', '#764ba2', '#4caf50', '#ff9800', '#e91e63', '#00bcd4', '#ffd700'];
 
 const LITE_REASONS = [
   'I want to train independently without a coach',
@@ -688,22 +701,69 @@ const NpsSurveyPage: React.FC = () => {
 
             {/* Step 4: Confirmation */}
             {step === 4 && (
-              <Box sx={{ textAlign: 'center', py: 3 }}>
-                <CheckCircleOutlineIcon
-                  sx={{
-                    fontSize: 64,
-                    color: '#4caf50',
-                    mb: 2,
-                  }}
-                />
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+              <Box sx={{ textAlign: 'center', py: 3, position: 'relative', overflow: 'hidden' }}>
+                {/* Confetti particles */}
+                {CONFETTI_COLORS.map((color, i) => (
+                  <Box
+                    key={i}
+                    sx={{
+                      position: 'absolute',
+                      width: 8,
+                      height: 8,
+                      borderRadius: i % 2 === 0 ? '50%' : '2px',
+                      bgcolor: color,
+                      top: '10%',
+                      left: `${10 + i * 12}%`,
+                      animation: `${confettiFall} ${1.5 + (i % 3) * 0.5}s ease-out ${i * 0.15}s forwards`,
+                    }}
+                  />
+                ))}
+                {CONFETTI_COLORS.map((color, i) => (
+                  <Box
+                    key={`b-${i}`}
+                    sx={{
+                      position: 'absolute',
+                      width: 6,
+                      height: 10,
+                      borderRadius: '1px',
+                      bgcolor: color,
+                      top: '5%',
+                      left: `${5 + i * 14}%`,
+                      animation: `${confettiFall} ${1.8 + (i % 2) * 0.4}s ease-out ${0.3 + i * 0.12}s forwards`,
+                    }}
+                  />
+                ))}
+
+                <Box sx={{ animation: `${celebrationPulse} 2s ease-in-out`, position: 'relative', zIndex: 1 }}>
+                  <CheckCircleOutlineIcon
+                    sx={{
+                      fontSize: 64,
+                      color: '#4caf50',
+                      mb: 2,
+                    }}
+                  />
+                </Box>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, position: 'relative', zIndex: 1 }}>
                   Your feedback has been submitted
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3, position: 'relative', zIndex: 1 }}>
                   {isLiteRunner
                     ? 'Thank you for helping us improve the RHWB experience. The survey is now complete — you may exit by closing the browser.'
                     : 'Thank you for helping us improve the RHWB experience. Your responses are confidential and will be used to enhance our coaching and program.'}
                 </Typography>
+                <Box
+                  component="img"
+                  src="/s14-coaches.jpeg"
+                  alt="RHWB Coaches"
+                  sx={{
+                    width: '100%',
+                    maxWidth: 400,
+                    borderRadius: 2,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    position: 'relative',
+                    zIndex: 1,
+                  }}
+                />
               </Box>
             )}
           </Box>
