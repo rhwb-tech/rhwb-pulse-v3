@@ -368,13 +368,19 @@ const NpsSurveyPage: React.FC = () => {
                   variant="h6"
                   sx={{ fontWeight: 600, mb: 2, fontSize: { xs: '1rem', sm: '1.15rem' } }}
                 >
-                  Your feedback matters.
+                  Your Feedback is a Gift.
                 </Typography>
-                <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.7, mb: 3 }}>
-                  This short survey helps us understand your experience with the program so we can continue improving it for the entire RHWB community. Your honest feedback — both positive and critical — helps us make the program better for current and future runners.
+                <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.7, mb: 2 }}>
+                  For over 15 seasons, RHWB has grown by continuously listening to our runners. Your honest feedback—both positive and developmental—helps us improve and strengthen our coaching program.
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.7, mb: 3 }}>
-                  Your email is used only to authenticate responses and prevent spam. Your feedback will remain completely anonymous to your coach.
+                <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.7, mb: 2 }}>
+                  This survey will take <strong>less than 4 minutes</strong>, but your input can make a meaningful difference for hundreds of runners in future seasons.
+                </Typography>
+                <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.7, mb: 2 }}>
+                  Your <strong>responses are anonymous</strong> to your coach. Your email is used only to authenticate responses and prevent duplicate submissions.
+                </Typography>
+                <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.7, mb: 3, fontWeight: 500 }}>
+                  Thank you for helping us get better.
                 </Typography>
               </Box>
               <Box sx={{ px: 3, pb: 3, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
@@ -409,10 +415,10 @@ const NpsSurveyPage: React.FC = () => {
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              {step === 0 && (isLiteRunner ? 'Rate the Lite Program' : 'Rate Your Coach')}
-              {step === 1 && 'Recommend Your Coach'}
-              {step === 2 && 'Rate RHWB'}
-              {step === 3 && 'Pulse Experience'}
+              {step === 0 && (isLiteRunner ? 'Overall Feedback: Self Serve Program' : 'Detailed Feedback: Your Coach')}
+              {step === 1 && 'Overall Feedback: Your Coach'}
+              {step === 2 && 'Detailed Feedback: RHWB Organization'}
+              {step === 3 && <>Feedback on Pulse: Our Runner Metrics Dashboard (<a href="https://pulse.rhwb.org" target="_blank" rel="noopener noreferrer" style={{ fontWeight: 700 }}>pulse.rhwb.org</a>)</>}
               {step === 4 && 'Thank You!'}
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -468,8 +474,12 @@ const NpsSurveyPage: React.FC = () => {
                     isMobile={isMobile}
                   />
                 </Box>
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem', mb: 1 }}>
+                  We value any qualitative feedback that helps provide context to your ratings.
+                  {hasLowCoachRating && ' If you have given a rating of 6 or below, we especially encourage you to share your observations so we can better understand and improve.'}
+                </Typography>
                 <TextField
-                  label={hasLowCoachRating ? 'Please share what we can improve (required)' : 'Additional comments (optional)'}
+                  label={hasLowCoachRating ? 'Your feedback (required)' : 'Additional comments (optional)'}
                   required={hasLowCoachRating}
                   error={hasLowCoachRating && !responses.comments.trim()}
                   helperText=""
@@ -618,8 +628,12 @@ const NpsSurveyPage: React.FC = () => {
                     />
                   </Box>
                 ))}
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem', mb: 1 }}>
+                  We value any qualitative feedback that helps provide context to your ratings.
+                  {hasLowRhwbRating && ' If you have given a rating of 6 or below, we especially encourage you to share your observations so we can better understand and improve.'}
+                </Typography>
                 <TextField
-                  label={hasLowRhwbRating ? 'Please share what we can improve (required)' : 'Additional comments (optional)'}
+                  label={hasLowRhwbRating ? 'Your feedback (required)' : 'Additional comments (optional)'}
                   required={hasLowRhwbRating}
                   error={hasLowRhwbRating && !responses.rhwb_comments.trim()}
                   helperText=""
