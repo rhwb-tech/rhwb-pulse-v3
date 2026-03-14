@@ -77,8 +77,10 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
         const result = await response.json();
         console.log('[NPS] Check result:', result);
 
-        if (result.hasMeso3 && !result.alreadySubmitted) {
+        if (result.metadata) {
           setMetadata(result.metadata);
+        }
+        if (result.hasMeso3) {
           setShouldShowSurvey(true);
         }
       } catch (err: any) {

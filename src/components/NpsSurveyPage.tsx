@@ -304,27 +304,11 @@ const NpsSurveyPage: React.FC = () => {
     navigate('/');
   };
 
-  // Show loading while checking eligibility
-  if (!checkComplete) {
+  // Show loading while checking eligibility (wait for season + metadata to load)
+  if (!currentSeason || (!checkComplete && !metadata)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <Typography variant="body1" sx={{ color: 'text.secondary' }}>Loading survey...</Typography>
-      </Box>
-    );
-  }
-
-  // If already submitted or not eligible, redirect to dashboard
-  if (checkComplete && !survey.shouldShowSurvey && step !== 4) {
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', gap: 2 }}>
-        <Typography variant="h6" sx={{ color: 'text.secondary' }}>
-          Survey already completed or not available
-        </Typography>
-        <Button variant="contained" onClick={goToDashboard}
-          sx={{ background: 'linear-gradient(135deg, #667eea, #764ba2)', '&:hover': { background: 'linear-gradient(135deg, #5a6fd6, #6a4295)' } }}
-        >
-          Go to Dashboard
-        </Button>
       </Box>
     );
   }
@@ -516,7 +500,7 @@ const NpsSurveyPage: React.FC = () => {
                   variant="body2"
                   sx={{ fontWeight: 600, mb: 1, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
                 >
-                  I chose the Lite program because (select all that apply):
+                  I chose the Self Serve program because (select all that apply):
                 </Typography>
                 <FormGroup sx={{ mb: 2.5, pl: 1 }}>
                   {LITE_REASONS.map((reason) => (
@@ -589,7 +573,7 @@ const NpsSurveyPage: React.FC = () => {
                     variant="body2"
                     sx={{ fontWeight: 600, mb: 1, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
                   >
-                    Rate RHWB's Lite Program
+                    Rate RHWB's Self Serve Program
                   </Typography>
                   <RatingSelector
                     value={responses.lite_rating}
@@ -601,7 +585,7 @@ const NpsSurveyPage: React.FC = () => {
                 </Box>
 
                 <TextField
-                  label={hasLowLiteRating ? 'Let us know how we can improve the Lite Program (required)' : 'Let us know how we can improve the Lite Program (optional)'}
+                  label={hasLowLiteRating ? 'Let us know how we can improve the Self Serve Program (required)' : 'Let us know how we can improve the Self Serve Program (optional)'}
                   required={hasLowLiteRating}
                   error={hasLowLiteRating && !responses.lite_comments.trim()}
                   helperText=""
