@@ -25,6 +25,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
   const [metadata, setMetadata] = useState<NpsSurveyMetadata | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [checkComplete, setCheckComplete] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
   const seasonKey = `Season ${season}`;
   const dismissedKey = `rhwb-nps-dismissed-${seasonKey}`;
@@ -80,7 +81,10 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
         if (result.metadata) {
           setMetadata(result.metadata);
         }
-        if (result.hasMeso3) {
+        if (result.alreadySubmitted) {
+          setAlreadySubmitted(true);
+        }
+        if (result.hasMeso3 && !result.alreadySubmitted) {
           setShouldShowSurvey(true);
         }
       } catch (err: any) {
@@ -178,6 +182,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
 
   return {
     shouldShowSurvey,
+    alreadySubmitted,
     step,
     setStep,
     responses,

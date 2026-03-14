@@ -304,11 +304,58 @@ const NpsSurveyPage: React.FC = () => {
     navigate('/');
   };
 
+  // Redirect non-eligible users (coach/admin) back to dashboard
+  const isNonRunner = checkComplete && !survey.shouldShowSurvey && !survey.alreadySubmitted;
+  React.useEffect(() => {
+    if (isNonRunner) {
+      navigate('/');
+    }
+  }, [isNonRunner, navigate]);
+
   // Show loading while checking eligibility (wait for season + metadata to load)
   if (!currentSeason || (!checkComplete && !metadata)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <Typography variant="body1" sx={{ color: 'text.secondary' }}>Loading survey...</Typography>
+      </Box>
+    );
+  }
+
+  // Show "already completed" message for runners who previously submitted
+  if (checkComplete && !survey.shouldShowSurvey && survey.alreadySubmitted) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+          py: { xs: 2, sm: 4 },
+          px: { xs: 1, sm: 2 },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Container maxWidth="sm">
+          <Paper elevation={3} sx={{ borderRadius: 3, p: 4, textAlign: 'center' }}>
+            <CheckCircleOutlineIcon sx={{ fontSize: 64, color: '#4caf50', mb: 2 }} />
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+              Survey Already Completed
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+              You have already submitted your Season {currentSeason} feedback. Thank you for your response!
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={goToDashboard}
+              sx={{
+                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                '&:hover': { background: 'linear-gradient(135deg, #5a6fd6, #6a4295)' },
+              }}
+            >
+              Go to Dashboard
+            </Button>
+          </Paper>
+        </Container>
       </Box>
     );
   }
