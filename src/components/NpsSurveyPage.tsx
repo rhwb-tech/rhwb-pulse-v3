@@ -202,7 +202,7 @@ const NpsSurveyPage: React.FC = () => {
   const email = user?.email || '';
   const userRole = user?.role;
 
-  const survey = useNpsSurvey(email, userRole, currentSeason);
+  const survey = useNpsSurvey(email, userRole, currentSeason, true); // bypass session dismissal on direct navigation
 
   const {
     step,
@@ -304,19 +304,57 @@ const NpsSurveyPage: React.FC = () => {
     navigate('/');
   };
 
-  // Redirect non-eligible users (coach/admin) back to dashboard
-  const isNonRunner = checkComplete && !survey.shouldShowSurvey && !survey.alreadySubmitted;
+  // Redirect non-eligible roles (coach/admin) back to dashboard
+  const isNonRunnerRole = !!userRole && userRole !== 'runner' && userRole !== 'athlete' && userRole !== 'hybrid';
   React.useEffect(() => {
-    if (isNonRunner) {
+    if (isNonRunnerRole) {
       navigate('/');
     }
-  }, [isNonRunner, navigate]);
+  }, [isNonRunnerRole, navigate]);
 
   // Show loading while checking eligibility (wait for season + metadata to load)
   if (!currentSeason || (!checkComplete && !metadata)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <Typography variant="body1" sx={{ color: 'text.secondary' }}>Loading survey...</Typography>
+      </Box>
+    );
+  }
+
+  // Show error if eligibility check failed (e.g., runner profile not found)
+  if (checkComplete && survey.eligibilityCheckFailed && !survey.shouldShowSurvey) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+          py: { xs: 2, sm: 4 },
+          px: { xs: 1, sm: 2 },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Container maxWidth="sm">
+          <Paper elevation={3} sx={{ borderRadius: 3, p: 4, textAlign: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+              Survey Unavailable
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+              We were unable to load your survey profile. Please contact your coach or reach out to the RHWB team for assistance.
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={goToDashboard}
+              sx={{
+                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                '&:hover': { background: 'linear-gradient(135deg, #5a6fd6, #6a4295)' },
+              }}
+            >
+              Go to Dashboard
+            </Button>
+          </Paper>
+        </Container>
       </Box>
     );
   }

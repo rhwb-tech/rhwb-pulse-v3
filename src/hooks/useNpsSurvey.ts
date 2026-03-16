@@ -18,7 +18,7 @@ const INITIAL_RESPONSES: NpsSurveyResponses = {
   pulse_experience: '',
 };
 
-export function useNpsSurvey(email: string, userRole: string | undefined, season: string) {
+export function useNpsSurvey(email: string, userRole: string | undefined, season: string, bypassDismissal = false) {
   const [shouldShowSurvey, setShouldShowSurvey] = useState(false);
   const [step, setStep] = useState(0); // 0: Coach ratings, 1: Coach recommendation, 2: RHWB, 3: Pulse experience, 4: Confirmation
   const [responses, setResponses] = useState<NpsSurveyResponses>(INITIAL_RESPONSES);
@@ -26,6 +26,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
   const [submitting, setSubmitting] = useState(false);
   const [checkComplete, setCheckComplete] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
+  const [eligibilityCheckFailed, setEligibilityCheckFailed] = useState(false);
 
   const seasonKey = `Season ${season}`;
   const dismissedKey = `rhwb-nps-dismissed-${seasonKey}`;
@@ -38,13 +39,15 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
       return;
     }
 
-    // Check session dismissal
-    try {
-      if (sessionStorage.getItem(dismissedKey) === 'true') {
-        setCheckComplete(true);
-        return;
-      }
-    } catch { /* sessionStorage unavailable */ }
+    // Check session dismissal (bypass when user directly navigates to the survey page)
+    if (!bypassDismissal) {
+      try {
+        if (sessionStorage.getItem(dismissedKey) === 'true') {
+          setCheckComplete(true);
+          return;
+        }
+      } catch { /* sessionStorage unavailable */ }
+    }
 
     const checkEligibility = async () => {
       try {
@@ -72,6 +75,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
 
         if (!response.ok) {
           console.error('[NPS] Check failed:', response.status);
+          setEligibilityCheckFailed(true);
           return;
         }
 
@@ -93,13 +97,14 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
         } else {
           console.error('[NPS] Check error:', err);
         }
+        setEligibilityCheckFailed(true);
       } finally {
         setCheckComplete(true);
       }
     };
 
     checkEligibility();
-  }, [email, season, userRole, seasonKey, dismissedKey]);
+  }, [email, season, userRole, seasonKey, dismissedKey, bypassDismissal]);
 
   const updateResponse = useCallback((field: keyof NpsSurveyResponses, value: number | string | string[] | null) => {
     setResponses(prev => ({ ...prev, [field]: value }));
@@ -183,6 +188,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
   return {
     shouldShowSurvey,
     alreadySubmitted,
+    eligibilityCheckFailed,
     step,
     setStep,
     responses,
