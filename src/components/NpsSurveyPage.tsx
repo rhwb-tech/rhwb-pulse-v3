@@ -305,7 +305,7 @@ const NpsSurveyPage: React.FC = () => {
   };
 
   // Redirect non-eligible roles (coach/admin) back to dashboard
-  const isNonRunnerRole = !!userRole && userRole !== 'runner' && userRole !== 'athlete' && userRole !== 'hybrid';
+  const isNonRunnerRole = !!userRole && userRole !== 'runner' && userRole !== 'hybrid';
   React.useEffect(() => {
     if (isNonRunnerRole) {
       navigate('/');
