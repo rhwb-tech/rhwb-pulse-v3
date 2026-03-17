@@ -112,8 +112,8 @@ serve(async (req) => {
       )
     }
 
-  } catch (error) {
-    console.error('[NPS] Edge Function error:', error)
+  } catch (error: any) {
+    console.error('[NPS] Edge Function unhandled error:', error?.message || error)
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -265,11 +265,14 @@ async function handleSubmit(
     race_type: info.race_distance || null,
   }
 
-  // 1. Write to Cloud Run (HIPAA primary store)
+  // 1. Write to Cloud Run (HIPAA primary store) — 8s timeout so it never blocks Supabase write
   const cloudRunUrl = Deno.env.get('CLOUD_RUN_URL')!
   const cloudRunApiKey = Deno.env.get('CLOUD_RUN_API_KEY')!
 
   try {
+    const cloudRunController = new AbortController()
+    const cloudRunTimeout = setTimeout(() => cloudRunController.abort(), 8000)
+
     const cloudRunResponse = await fetch(`${cloudRunUrl}/submit-nps-survey`, {
       method: 'POST',
       headers: {
@@ -277,15 +280,23 @@ async function handleSubmit(
         'X-API-Key': cloudRunApiKey,
       },
       body: JSON.stringify(surveyData),
+      signal: cloudRunController.signal,
     })
 
+    clearTimeout(cloudRunTimeout)
+
     if (!cloudRunResponse.ok) {
-      console.error('[NPS] Cloud Run error:', cloudRunResponse.status, await cloudRunResponse.text())
+      const body = await cloudRunResponse.text().catch(() => '')
+      console.error('[NPS] Cloud Run error:', cloudRunResponse.status, body, '| email:', userEmail)
     } else {
-      console.log('[NPS] SUBMIT - Cloud Run write successful')
+      console.log('[NPS] SUBMIT - Cloud Run write successful | email:', userEmail)
     }
-  } catch (cloudRunError) {
-    console.error('[NPS] Cloud Run write failed:', cloudRunError)
+  } catch (cloudRunError: any) {
+    if (cloudRunError?.name === 'AbortError') {
+      console.error('[NPS] Cloud Run timed out (>8s) | email:', userEmail)
+    } else {
+      console.error('[NPS] Cloud Run write failed:', cloudRunError?.message, '| email:', userEmail)
+    }
     // Continue with Supabase write even if Cloud Run fails
   }
 
@@ -295,14 +306,14 @@ async function handleSubmit(
     .upsert(surveyData, { onConflict: 'runner_id,season' })
 
   if (supabaseError) {
-    console.error('[NPS] Supabase write error:', supabaseError)
+    console.error('[NPS] Supabase write error | email:', userEmail, '| code:', supabaseError.code, '| message:', supabaseError.message, '| details:', supabaseError.details)
     return new Response(
       JSON.stringify({ error: 'Failed to save survey response' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 
-  console.log('[NPS] SUBMIT - Supabase write successful')
+  console.log('[NPS] SUBMIT - Supabase write successful | email:', userEmail)
 
   return new Response(
     JSON.stringify({ success: true }),

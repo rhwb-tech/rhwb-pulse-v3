@@ -14,6 +14,7 @@ import {
   FormGroup,
   useMediaQuery,
   keyframes,
+  Alert,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { useNavigate } from 'react-router-dom';
@@ -836,6 +837,15 @@ const NpsSurveyPage: React.FC = () => {
               </Box>
             )}
           </Box>
+
+          {/* Submit error */}
+          {survey.submitError && (
+            <Box sx={{ px: 3, pb: 1 }}>
+              <Alert severity="error" sx={{ fontSize: '0.8rem' }}>
+                Something went wrong while submitting. Please try again or contact the RHWB team.
+              </Alert>
+            </Box>
+          )}
 
           {/* Actions */}
           <Box sx={{ px: 3, pb: 3, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>

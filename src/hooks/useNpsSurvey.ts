@@ -24,6 +24,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
   const [responses, setResponses] = useState<NpsSurveyResponses>(INITIAL_RESPONSES);
   const [metadata, setMetadata] = useState<NpsSurveyMetadata | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
   const [checkComplete, setCheckComplete] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [eligibilityCheckFailed, setEligibilityCheckFailed] = useState(false);
@@ -131,7 +132,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         console.error('[NPS] No session for submit');
-        setSubmitting(false);
+        setSubmitError(true);
         return;
       }
 
@@ -159,8 +160,9 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        console.error('[NPS] Submit failed:', response.status);
-        setSubmitting(false);
+        const body = await response.text().catch(() => '');
+        console.error('[NPS] Submit failed:', response.status, body);
+        setSubmitError(true);
         return;
       }
 
@@ -169,6 +171,9 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
 
       if (result.success) {
         setStep(4); // Show confirmation
+      } else {
+        console.error('[NPS] Submit returned non-success:', result);
+        setSubmitError(true);
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -176,6 +181,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
       } else {
         console.error('[NPS] Submit error:', err);
       }
+      setSubmitError(true);
     } finally {
       setSubmitting(false);
     }
@@ -189,6 +195,7 @@ export function useNpsSurvey(email: string, userRole: string | undefined, season
     shouldShowSurvey,
     alreadySubmitted,
     eligibilityCheckFailed,
+    submitError,
     step,
     setStep,
     responses,
