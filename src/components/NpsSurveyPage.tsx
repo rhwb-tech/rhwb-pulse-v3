@@ -842,7 +842,7 @@ const NpsSurveyPage: React.FC = () => {
           {survey.submitError && (
             <Box sx={{ px: 3, pb: 1 }}>
               <Alert severity="error" sx={{ fontSize: '0.8rem' }}>
-                Something went wrong while submitting. Please try again or contact the RHWB team.
+                Your session may have expired. Please refresh the page to re-authenticate, then re-submit your survey. If the issue persists, contact the RHWB team.
               </Alert>
             </Box>
           )}
