@@ -8,6 +8,7 @@ import { useApp } from '../contexts/AppContext';
 import { getAppConfig } from '../config/appConfig';
 import AuthOTPVerification from './AuthOTPVerification';
 import CertificateGenerator from '../CertificateGeneratorSimple';
+import CertificateGeneratorS15 from '../CertificateGeneratorS15';
 import { supabase } from './supabaseClient';
 import { useNavigate, useLocation } from 'react-router-dom';
 // import VeerChatbot from './VeerChatbot';
@@ -185,10 +186,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     setProfileMenuAnchor(null);
   };
   
-  // Certificate dialog state
+  // Certificate dialog state — Season 14
   const [certificateDialogOpen, setCertificateDialogOpen] = React.useState(false);
   const [runnerData, setRunnerData] = React.useState<any>(null);
   const [loadingRunnerData, setLoadingRunnerData] = React.useState(false);
+
+  // Certificate dialog state — Season 15
+  const [certificateS15DialogOpen, setCertificateS15DialogOpen] = React.useState(false);
+  const [runnerS15Data, setRunnerS15Data] = React.useState<any>(null);
+  const [loadingS15Data, setLoadingS15Data] = React.useState(false);
+
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
   const [snackbarMessage, setSnackbarMessage] = React.useState('');
   
@@ -288,6 +295,75 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   
   const handleCloseCertificateDialog = () => {
     setCertificateDialogOpen(false);
+  };
+
+  const handleSeason15Click = async () => {
+    const isNonRunnerRole = userRole === 'coach' || userRole === 'admin' || (userRole === 'hybrid' && hybridToggle === 'myCohorts');
+
+    if (isNonRunnerRole && !selectedRunner) {
+      setSnackbarMessage('Please select a runner from the dashboard before generating a certificate.');
+      setSnackbarOpen(true);
+      setHamburgerMenuAnchor(null);
+      return;
+    }
+
+    const targetEmail = (isNonRunnerRole && selectedRunner) ? selectedRunner : (user?.email || '');
+
+    if (!targetEmail) {
+      setSnackbarMessage('Unable to generate certificate: No email address found.');
+      setSnackbarOpen(true);
+      setHamburgerMenuAnchor(null);
+      return;
+    }
+
+    setLoadingS15Data(true);
+    try {
+      const [{ data: profileData, error: profileError }, { data: seasonData, error: seasonError }] = await Promise.all([
+        supabase
+          .from('runners_profile')
+          .select('runner_name')
+          .eq('email_id', targetEmail.toLowerCase())
+          .single(),
+        supabase
+          .from('runner_season_info')
+          .select('race_timings, race_distance_completed, coach, race_pr')
+          .eq('email_id', targetEmail.toLowerCase())
+          .eq('season', 'Season 15')
+          .single(),
+      ]);
+
+      if (profileError) throw profileError;
+      if (seasonError) throw seasonError;
+
+      setRunnerS15Data({
+        id:       targetEmail,
+        name:     profileData?.runner_name || targetEmail.split('@')[0] || 'Runner',
+        race:     seasonData?.race_distance_completed || null,
+        time:     seasonData?.race_timings || null,
+        coach:    seasonData?.coach || null,
+        race_pr:  seasonData?.race_pr || false,
+      });
+      setCertificateS15DialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching Season 15 runner data:', error);
+      setRunnerS15Data({
+        id:      targetEmail,
+        name:    targetEmail.split('@')[0] || 'Runner',
+        race:    null,
+        time:    null,
+        coach:   null,
+        race_pr: false,
+      });
+      setCertificateS15DialogOpen(true);
+    } finally {
+      setLoadingS15Data(false);
+    }
+
+    setHamburgerMenuAnchor(null);
+  };
+
+  const handleCloseCertificateS15Dialog = () => {
+    setCertificateS15DialogOpen(false);
   };
 
   const handleCloseSnackbar = () => {
@@ -588,6 +664,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
             >
               <ListItemText primary="Season 14" />
             </MenuItem>
+            <MenuItem
+              onClick={handleSeason15Click}
+              sx={{
+                minHeight: 40,
+                pl: 3,
+                '&:hover': {
+                  bgcolor: '#f5f5f5',
+                },
+              }}
+            >
+              <ListItemText primary="Season 15" />
+            </MenuItem>
           </Menu>
 
           <img 
@@ -786,6 +874,37 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         </DialogActions>
       </Dialog>
       
+      {/* Season 15 Certificate Generator Dialog */}
+      <Dialog
+        open={certificateS15DialogOpen}
+        onClose={handleCloseCertificateS15Dialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Generate Season 15 Certificate
+        </DialogTitle>
+        <DialogContent>
+          {loadingS15Data ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress />
+              <Typography sx={{ ml: 2 }}>Loading runner data...</Typography>
+            </Box>
+          ) : runnerS15Data ? (
+            <CertificateGeneratorS15
+              runner={runnerS15Data}
+            />
+          ) : (
+            <Typography>No runner data available</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCertificateS15Dialog}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Snackbar for friendly messages */}
       <Snackbar
         open={snackbarOpen}

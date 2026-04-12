@@ -465,6 +465,104 @@ app.post('/veer-chat', validateApiKey, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+// NPS scores from rhwbsurvey_season15 (wide format, same schema as rhwbsurvey)
+// Returns New/Return rows only (no 'All'); caller merges and recomputes 'All'.
+app.post('/get-rhwbsurvey-s15-nps', validateApiKey, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      WITH base AS (
+        -- Pro
+        SELECT
+          season, season_phase,
+          'Pro' AS program,
+          pro_runners_who_is_your_coach AS coach,
+          CASE
+            WHEN are_you_a_new_or_return_runner_to_rhwb ILIKE '%new%'    THEN 'New'
+            WHEN are_you_a_new_or_return_runner_to_rhwb ILIKE '%return%' THEN 'Return'
+          END AS runner_status,
+          CASE WHEN TRIM(CAST(your_coach_on_a_scale_from_0_to_10_rate_the_quality_and_timelin AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(your_coach_on_a_scale_from_0_to_10_rate_the_quality_and_timelin AS TEXT))::numeric ELSE NULL END AS feedback_quality,
+          CASE WHEN TRIM(CAST(your_coach_on_a_scale_from_0_to_10_rate_the_overall_communicati AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(your_coach_on_a_scale_from_0_to_10_rate_the_overall_communicati AS TEXT))::numeric ELSE NULL END AS communication,
+          CASE WHEN TRIM(CAST(pro_your_coach_on_a_scale_from_0_to_10_rate_the_relationship_wi AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(pro_your_coach_on_a_scale_from_0_to_10_rate_the_relationship_wi AS TEXT))::numeric ELSE NULL END AS relationship,
+          CASE WHEN TRIM(CAST(pro_your_coach_on_a_scale_from_0_to_10_how_likely_are_you_to_re AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(pro_your_coach_on_a_scale_from_0_to_10_how_likely_are_you_to_re AS TEXT))::numeric ELSE NULL END AS recommendation,
+          CASE WHEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_effectiveness_of_ AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_effectiveness_of_ AS TEXT))::numeric ELSE NULL END AS rhwb_effectiveness,
+          CASE WHEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_depth_and_clarity AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_depth_and_clarity AS TEXT))::numeric ELSE NULL END AS rhwb_knowledge_depth,
+          CASE WHEN TRIM(CAST(overall_rhwb_finally_on_a_scale_from_0_to_10_how_likely_are_you AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_finally_on_a_scale_from_0_to_10_how_likely_are_you AS TEXT))::numeric ELSE NULL END AS rhwb_recommendation
+        FROM rhwbsurvey_season15
+        WHERE what_program_you_are_in_now = 'Pro (With Dedicated Coach)'
+          AND pro_runners_who_is_your_coach IS NOT NULL
+          AND season IS NOT NULL
+          AND are_you_a_new_or_return_runner_to_rhwb IS NOT NULL
+
+        UNION ALL
+
+        -- Masters
+        SELECT
+          season, season_phase,
+          'Masters' AS program,
+          masters_program_who_is_your_coach AS coach,
+          CASE
+            WHEN are_you_a_new_or_return_runner_to_rhwb ILIKE '%new%'    THEN 'New'
+            WHEN are_you_a_new_or_return_runner_to_rhwb ILIKE '%return%' THEN 'Return'
+          END AS runner_status,
+          NULL::numeric AS feedback_quality,
+          NULL::numeric AS communication,
+          CASE WHEN TRIM(CAST(masters_your_coach_on_a_scale_from_0_to_10_rate_the_relationshi AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(masters_your_coach_on_a_scale_from_0_to_10_rate_the_relationshi AS TEXT))::numeric ELSE NULL END AS relationship,
+          CASE WHEN TRIM(CAST(masters_overall_program_on_a_scale_from_0_to_10_how_likely_are_ AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(masters_overall_program_on_a_scale_from_0_to_10_how_likely_are_ AS TEXT))::numeric ELSE NULL END AS recommendation,
+          CASE WHEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_effectiveness_of_ AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_effectiveness_of_ AS TEXT))::numeric ELSE NULL END AS rhwb_effectiveness,
+          CASE WHEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_depth_and_clarity AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_depth_and_clarity AS TEXT))::numeric ELSE NULL END AS rhwb_knowledge_depth,
+          CASE WHEN TRIM(CAST(overall_rhwb_finally_on_a_scale_from_0_to_10_how_likely_are_you AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_finally_on_a_scale_from_0_to_10_how_likely_are_you AS TEXT))::numeric ELSE NULL END AS rhwb_recommendation
+        FROM rhwbsurvey_season15
+        WHERE what_program_you_are_in_now = 'Masters (Senior Citizens walking program)'
+          AND masters_program_who_is_your_coach IS NOT NULL
+          AND season IS NOT NULL
+          AND are_you_a_new_or_return_runner_to_rhwb IS NOT NULL
+
+        UNION ALL
+
+        -- Walk
+        SELECT
+          season, season_phase,
+          'Walk' AS program,
+          walkers_program_who_is_your_coach AS coach,
+          CASE
+            WHEN are_you_a_new_or_return_runner_to_rhwb ILIKE '%new%'    THEN 'New'
+            WHEN are_you_a_new_or_return_runner_to_rhwb ILIKE '%return%' THEN 'Return'
+          END AS runner_status,
+          NULL::numeric AS feedback_quality,
+          NULL::numeric AS communication,
+          CASE WHEN TRIM(CAST(walkers_your_coach_on_a_scale_from_0_to_10_rate_the_relationshi AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(walkers_your_coach_on_a_scale_from_0_to_10_rate_the_relationshi AS TEXT))::numeric ELSE NULL END AS relationship,
+          CASE WHEN TRIM(CAST(walkers_overall_program_on_a_scale_from_0_to_10_how_likely_are_ AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(walkers_overall_program_on_a_scale_from_0_to_10_how_likely_are_ AS TEXT))::numeric ELSE NULL END AS recommendation,
+          CASE WHEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_effectiveness_of_ AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_effectiveness_of_ AS TEXT))::numeric ELSE NULL END AS rhwb_effectiveness,
+          CASE WHEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_depth_and_clarity AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_on_a_scale_from_0_to_10_rate_the_depth_and_clarity AS TEXT))::numeric ELSE NULL END AS rhwb_knowledge_depth,
+          CASE WHEN TRIM(CAST(overall_rhwb_finally_on_a_scale_from_0_to_10_how_likely_are_you AS TEXT)) ~ '^[0-9]+(\\.[0-9]+)?$' THEN TRIM(CAST(overall_rhwb_finally_on_a_scale_from_0_to_10_how_likely_are_you AS TEXT))::numeric ELSE NULL END AS rhwb_recommendation
+        FROM rhwbsurvey_season15
+        WHERE what_program_you_are_in_now = 'Walking Program'
+          AND walkers_program_who_is_your_coach IS NOT NULL
+          AND season IS NOT NULL
+          AND are_you_a_new_or_return_runner_to_rhwb IS NOT NULL
+      )
+      SELECT
+        season, season_phase, program, coach, runner_status,
+        ROUND((SUM(CASE WHEN feedback_quality     >= 9 THEN 1 WHEN feedback_quality     <= 6 THEN -1 ELSE 0 END)::numeric / NULLIF(COUNT(feedback_quality),     0)) * 100) AS feedback_nps,
+        ROUND((SUM(CASE WHEN communication        >= 9 THEN 1 WHEN communication        <= 6 THEN -1 ELSE 0 END)::numeric / NULLIF(COUNT(communication),        0)) * 100) AS comms_nps,
+        ROUND((SUM(CASE WHEN relationship         >= 9 THEN 1 WHEN relationship         <= 6 THEN -1 ELSE 0 END)::numeric / NULLIF(COUNT(relationship),         0)) * 100) AS rel_nps,
+        ROUND((SUM(CASE WHEN recommendation       >= 9 THEN 1 WHEN recommendation       <= 6 THEN -1 ELSE 0 END)::numeric / NULLIF(COUNT(recommendation),       0)) * 100) AS reco_nps,
+        ROUND((SUM(CASE WHEN rhwb_effectiveness   >= 9 THEN 1 WHEN rhwb_effectiveness   <= 6 THEN -1 ELSE 0 END)::numeric / NULLIF(COUNT(rhwb_effectiveness),   0)) * 100) AS rhwb_comms_nps,
+        ROUND((SUM(CASE WHEN rhwb_knowledge_depth >= 9 THEN 1 WHEN rhwb_knowledge_depth <= 6 THEN -1 ELSE 0 END)::numeric / NULLIF(COUNT(rhwb_knowledge_depth), 0)) * 100) AS rhwb_knowledge_nps,
+        ROUND((SUM(CASE WHEN rhwb_recommendation  >= 9 THEN 1 WHEN rhwb_recommendation  <= 6 THEN -1 ELSE 0 END)::numeric / NULLIF(COUNT(rhwb_recommendation),  0)) * 100) AS rhwb_reco_nps,
+        COUNT(*)::int AS total_responses
+      FROM base
+      WHERE runner_status IS NOT NULL AND coach IS NOT NULL
+      GROUP BY season, season_phase, program, coach, runner_status
+    `);
+
+    res.json({ data: result.rows });
+  } catch (err) {
+    console.error('Error fetching rhwbsurvey_season15 NPS:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`qual-scores-api listening on port ${PORT}`);
