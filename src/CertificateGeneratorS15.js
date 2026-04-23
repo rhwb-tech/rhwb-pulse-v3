@@ -49,6 +49,18 @@ const POS = {
   },
 };
 
+// Built-in PDF fonts (e.g., Helvetica) are WinAnsi-limited and can throw on some Unicode chars.
+// Normalize and transliterate text so certificate generation doesn't fail for specific names.
+const toPdfSafeText = (value) =>
+  String(value || '')
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // smart single quotes
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // smart double quotes
+    .replace(/[\u2013\u2014]/g, '-') // en/em dashes
+    .replace(/\u2026/g, '...') // ellipsis
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip accents/diacritics
+    .replace(/[^\x20-\x7E]/g, ''); // keep printable ASCII only
+
 export default function CertificateGeneratorS15({ runner }) {
   const [loading, setLoading] = useState(false);
   const [url, setUrl] = useState(null);
@@ -103,7 +115,7 @@ export default function CertificateGeneratorS15({ runner }) {
       const black = rgb(0, 0, 0);
 
       // 1. DATE — left-aligned at the start of the date underline
-      const dateText = formatDate();
+      const dateText = toPdfSafeText(formatDate());
       page.drawText(dateText, {
         x: px(POS.date.xFrac),
         y: py(POS.date.yFrac),
@@ -113,7 +125,7 @@ export default function CertificateGeneratorS15({ runner }) {
       });
 
       // 2. RUNNER NAME — centered on the long underline
-      const nameText = runner.name || '';
+      const nameText = toPdfSafeText(runner.name);
       const nameWidth = fontBold.widthOfTextAtSize(nameText, POS.runnerName.size);
       page.drawText(nameText, {
         x: px(POS.runnerName.xFrac) - nameWidth / 2,
@@ -124,7 +136,7 @@ export default function CertificateGeneratorS15({ runner }) {
       });
 
       // 3. OFFICIAL TIMING — left-aligned at start of timing underline
-      const timingText = String(runner.time || '');
+      const timingText = toPdfSafeText(runner.time);
       page.drawText(timingText, {
         x: px(POS.timing.xFrac),
         y: py(POS.timing.yFrac),
@@ -146,7 +158,7 @@ export default function CertificateGeneratorS15({ runner }) {
       }
 
       // 4. COACH NAME — erase hardcoded template name, draw dynamic value
-      const coachText = (runner.coach || '').toUpperCase();
+      const coachText = toPdfSafeText(runner.coach).toUpperCase();
       if (coachText) {
         // White rectangle to blank out "SRIVATSAN SATHYAMURTHY" baked into the template
         const coverX = px(POS.coachCover.xFrac);
