@@ -2,12 +2,15 @@ import React, { useState } from "react";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 
-// Maps race_distance_completed values to template files in public/
+// Maps race_distance_completed values to template files in public/.
+// Filenames must NOT contain spaces — some hosts fall back to index.html for
+// unresolved paths, which caused "No PDF header found" errors in production.
 const TEMPLATE_MAP = {
-  '5K': '/5k certificate.pdf',
-  '10K': '/10k certificate.pdf',
-  'Half Marathon': '/half certificate.pdf',
-  'Full Marathon': '/full certificate.pdf',
+  '5K': '/5k-certificate.pdf',
+  '10K': '/10k-certificate.pdf',
+  'Half Marathon': '/half-certificate.pdf',
+  'Full Marathon': '/full-certificate.pdf',
+  'Marathon': '/full-certificate.pdf',
 };
 
 // Text positions as fractions of page dimensions.
@@ -82,7 +85,15 @@ export default function CertificateGeneratorS15({ runner }) {
     try {
       // Load the distance-appropriate PDF template
       const templatePath = getTemplatePath(runner.race);
-      const existingPdfBytes = await fetch(encodeURI(templatePath)).then(r => r.arrayBuffer());
+      const templateResp = await fetch(encodeURI(templatePath));
+      if (!templateResp.ok) {
+        throw new Error(`Template fetch failed (${templateResp.status}) for ${templatePath}`);
+      }
+      const contentType = templateResp.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        throw new Error(`Template not found at ${templatePath} — server returned HTML`);
+      }
+      const existingPdfBytes = await templateResp.arrayBuffer();
       const pdfDoc = await PDFDocument.load(existingPdfBytes);
 
       // Register fontkit on the document instance (must be per-document, not static)
